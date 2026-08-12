@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kinetic"
+version = "0.1.0"
+description = "KINETIC: an autonomous coding agent built on the Claude Agent SDK."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "KINETIC" }]
+dependencies = [
+    "claude-agent-sdk>=0.2.130",
+    "anyio>=4.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-timeout>=2.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+kinetic = "kinetic.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kinetic"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
