@@ -28,6 +28,11 @@ class Capability(Flag):
     DEPENDENCY_INSTALL = auto()
     WORKSPACE_READ = auto()
     WORKSPACE_WRITE = auto()
+    # Phase 3 — environment / sandbox capabilities
+    ENVIRONMENT_CREATE = auto()
+    ENVIRONMENT_EXEC = auto()
+    ENVIRONMENT_NETWORK = auto()
+    ENVIRONMENT_ADMIN = auto()
 
 
 @dataclass(frozen=True)
@@ -112,5 +117,34 @@ WORKSPACE_READ = ToolPermission(
 WORKSPACE_WRITE = ToolPermission(
     capabilities=Capability.WORKSPACE_WRITE | Capability.WRITE_FS,
     description="Create or remove workspace directories.",
+    destructive=True,
+)
+
+#: Create/destroy a sandboxed execution environment.
+ENVIRONMENT_CREATE = ToolPermission(
+    capabilities=Capability.ENVIRONMENT_CREATE,
+    description="Create, start, stop, or destroy a sandboxed execution environment.",
+    destructive=True,
+)
+
+#: Execute a process inside a sandboxed environment.
+ENVIRONMENT_EXEC = ToolPermission(
+    capabilities=Capability.ENVIRONMENT_EXEC | Capability.EXECUTE,
+    description="Execute a command inside the sandboxed environment.",
+    destructive=True,
+    constraints={"requires_timeout": True},
+)
+
+#: Grant network access to a sandboxed environment.
+ENVIRONMENT_NETWORK = ToolPermission(
+    capabilities=Capability.ENVIRONMENT_NETWORK | Capability.NETWORK,
+    description="Configure network access policy for a sandboxed environment.",
+    destructive=False,
+)
+
+#: Administrative environment operations (change resource limits, mounts).
+ENVIRONMENT_ADMIN = ToolPermission(
+    capabilities=Capability.ENVIRONMENT_ADMIN,
+    description="Administrative environment operations (resource limits, mounts).",
     destructive=True,
 )

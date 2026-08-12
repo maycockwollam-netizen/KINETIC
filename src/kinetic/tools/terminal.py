@@ -3,16 +3,25 @@
 Runs commands as subprocesses, captures stdout/stderr, enforces a timeout,
 supports cancellation, and returns the exit code. Designed for the controlled
 environment; the permission policy decides whether execution is allowed at all.
+
+When an :class:`~kinetic.environment.environment.Environment` is provided, all
+execution goes through it (``Environment.exec`` -> runtime -> process), so the
+host is never an unrelated second backend. When no environment is provided
+(legacy/tests), execution falls back to the low-level ``run_command`` helper —
+which is exactly what the local runtime uses internally, preserving behavior.
 """
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kinetic.errors import ToolError
 from kinetic.tools.base import ToolDefinition, tool_result
+
+if TYPE_CHECKING:
+    from kinetic.environment import Environment
 
 
 @dataclass
@@ -90,7 +99,12 @@ class CancellationToken:
 
 
 class TerminalTool:
-    """A configurable terminal tool bound to a working directory + settings."""
+    """A configurable terminal tool bound to a working directory + settings.
+
+    If ``environment`` is provided, commands execute through it (sandboxed).
+    Otherwise the low-level ``run_command`` helper is used directly — which is
+    the same primitive the local runtime uses, so behavior is preserved.
+    """
 
     def __init__(
         self,
@@ -99,11 +113,13 @@ class TerminalTool:
         default_timeout: float = 120.0,
         max_timeout: float = 1800.0,
         cancellation: CancellationToken | None = None,
+        environment: Environment | None = None,
     ) -> None:
         self._cwd = cwd
         self._default_timeout = default_timeout
         self._max_timeout = max_timeout
         self._cancellation = cancellation
+        self._environment = environment
 
     async def run(self, args: dict[str, Any]) -> dict[str, Any]:
         command = args.get("command")
@@ -112,21 +128,40 @@ class TerminalTool:
         timeout = float(args.get("timeout", self._default_timeout))
         timeout = min(timeout, self._max_timeout)
 
-        result = await run_command(
-            command,
-            cwd=self._cwd,
-            timeout=timeout,
-            cancellation=self._cancellation,
-        )
+        if self._environment is not None:
+            from kinetic.environment import ProcessSpec
+
+            result = await self._environment.exec(
+                ProcessSpec(command=command, cwd=".", timeout=timeout),
+                cancellation=self._cancellation,
+            )
+            exit_code = result.exit_code
+            stdout = result.stdout
+            stderr = result.stderr
+            duration_ms = result.duration_ms
+            timed_out = result.timed_out
+        else:
+            res = await run_command(
+                command,
+                cwd=self._cwd,
+                timeout=timeout,
+                cancellation=self._cancellation,
+            )
+            exit_code = res.exit_code
+            stdout = res.stdout
+            stderr = res.stderr
+            duration_ms = res.duration_ms
+            timed_out = res.timed_out
+
         body = (
             f"$ {command}\n"
-            f"[exit {result.exit_code}] ({result.duration_ms}ms)"
-            + (" [TIMED OUT]" if result.timed_out else "")
+            f"[exit {exit_code}] ({duration_ms}ms)"
+            + (" [TIMED OUT]" if timed_out else "")
             + "\n--- stdout ---\n"
-            f"{result.stdout}"
-            + ("\n--- stderr ---\n" + result.stderr if result.stderr else "")
+            f"{stdout}"
+            + ("\n--- stderr ---\n" + stderr if stderr else "")
         )
-        return tool_result(body, is_error=(result.exit_code != 0 or result.timed_out))
+        return tool_result(body, is_error=(exit_code != 0 or timed_out))
 
 
 TERMINAL_INPUT_SCHEMA: dict[str, Any] = {
@@ -144,11 +179,20 @@ TERMINAL_INPUT_SCHEMA: dict[str, Any] = {
 
 
 def terminal_tool(
-    *, cwd: str, default_timeout: float, max_timeout: float
+    *,
+    cwd: str,
+    default_timeout: float,
+    max_timeout: float,
+    environment: Environment | None = None,
 ) -> ToolDefinition:
     from kinetic.security.policy import EXECUTE
 
-    instance = TerminalTool(cwd=cwd, default_timeout=default_timeout, max_timeout=max_timeout)
+    instance = TerminalTool(
+        cwd=cwd,
+        default_timeout=default_timeout,
+        max_timeout=max_timeout,
+        environment=environment,
+    )
     return ToolDefinition(
         name="run_command",
         description="Execute a shell command in the project workspace and return stdout/stderr and exit code.",

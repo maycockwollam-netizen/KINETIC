@@ -45,6 +45,18 @@ class EnvironmentError_(KINETICError):  # noqa: N801 - avoid shadowing builtin i
     """The environment/sandbox subsystem failed."""
 
 
+class SandboxError(EnvironmentError_):
+    """A sandbox/runtime operation failed (creation, isolation, enforcement)."""
+
+
+class EnvironmentStateError(EnvironmentError_):
+    """An invalid environment lifecycle transition or state was requested."""
+
+
+class RuntimeUnavailableError(EnvironmentError_):
+    """The requested runtime (e.g. Docker) is unavailable; do not fall back silently."""
+
+
 class WorkspaceError(EnvironmentError_):
     """A workspace operation failed (creation, cleanup, path validation)."""
 

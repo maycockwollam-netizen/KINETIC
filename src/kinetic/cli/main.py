@@ -39,8 +39,29 @@ def cli() -> None:
 @click.option("--model", default=None, help="Override the configured model.")
 @click.option("--max-turns", default=40, type=int, help="Max agent turns.")
 @click.option("--allow-network", is_flag=True, default=False, help="Enable network tools.")
+@click.option(
+    "--runtime",
+    type=click.Choice(["local", "docker"]),
+    default=None,
+    help="Execution runtime (default: from settings).",
+)
+@click.option(
+    "--network-policy",
+    type=click.Choice(["deny", "allow", "restricted"]),
+    default=None,
+    help="Sandbox network policy (default: deny).",
+)
 @click.option("--dry-run", is_flag=True, default=False, help="Build the session without running the model.")
-def run(prompt: str, workspace: str, model: str | None, max_turns: int, allow_network: bool, dry_run: bool) -> None:
+def run(
+    prompt: str,
+    workspace: str,
+    model: str | None,
+    max_turns: int,
+    allow_network: bool,
+    runtime: str | None,
+    network_policy: str | None,
+    dry_run: bool,
+) -> None:
     """Run the agent against a workspace with the given prompt."""
     settings = Settings()
     settings.ensure_directories()
@@ -55,6 +76,8 @@ def run(prompt: str, workspace: str, model: str | None, max_turns: int, allow_ne
         model=model,
         max_turns=max_turns,
         allow_network=allow_network,
+        runtime_type=runtime,
+        network_policy=network_policy,
     )
     session = AgentSession(settings, cfg)
 

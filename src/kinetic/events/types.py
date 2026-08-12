@@ -36,6 +36,17 @@ class EventType(StrEnum):
     DEPENDENCY_DETECTED = "dependency_detected"
     DEPENDENCY_INSTALL_STARTED = "dependency_install_started"
     DEPENDENCY_INSTALL_FINISHED = "dependency_install_finished"
+    # Phase 3 — environment / sandbox / process
+    ENVIRONMENT_CREATED = "environment_created"
+    ENVIRONMENT_STARTED = "environment_started"
+    ENVIRONMENT_STOPPED = "environment_stopped"
+    ENVIRONMENT_DESTROYED = "environment_destroyed"
+    ENVIRONMENT_FAILED = "environment_failed"
+    PROCESS_STARTED = "process_started"
+    PROCESS_FINISHED = "process_finished"
+    PROCESS_CANCELLED = "process_cancelled"
+    PROCESS_TIMEOUT = "process_timeout"
+    PERMISSION_DENIED = "permission_denied"
 
 
 @dataclass

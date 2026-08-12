@@ -44,12 +44,20 @@ class PermissionPolicy:
         allow_execute: bool = True,
         allow_git_write: bool = False,
         allow_dependency_install: bool = False,
+        allow_environment_create: bool = True,
+        allow_environment_exec: bool = True,
+        allow_environment_network: bool = False,
+        allow_environment_admin: bool = False,
     ) -> None:
         self._writable_roots = [r.resolve() for r in (writable_roots or [])]
         self._allow_network = allow_network
         self._allow_execute = allow_execute
         self._allow_git_write = allow_git_write
         self._allow_dependency_install = allow_dependency_install
+        self._allow_env_create = allow_environment_create
+        self._allow_env_exec = allow_environment_exec
+        self._allow_env_network = allow_environment_network
+        self._allow_env_admin = allow_environment_admin
 
     def evaluate(self, tool_name: str, permission: ToolPermission, tool_input: dict) -> Decision:
         caps = permission.capabilities
@@ -65,6 +73,17 @@ class PermissionPolicy:
 
         if Capability.DEPENDENCY_INSTALL in caps and not self._allow_dependency_install:
             return Decision.deny("dependency installation is disabled")
+
+        # Phase 3 — environment capabilities (least privilege; off by default
+        # for network + admin, on for create + exec since the session owns them).
+        if Capability.ENVIRONMENT_CREATE in caps and not self._allow_env_create:
+            return Decision.deny("environment creation is disabled")
+        if Capability.ENVIRONMENT_EXEC in caps and not self._allow_env_exec:
+            return Decision.deny("environment command execution is disabled")
+        if Capability.ENVIRONMENT_NETWORK in caps and not self._allow_env_network:
+            return Decision.deny("environment network access is disabled")
+        if Capability.ENVIRONMENT_ADMIN in caps and not self._allow_env_admin:
+            return Decision.deny("environment admin operations are disabled")
 
         if Capability.WRITE_FS in caps:
             target = tool_input.get("path") or tool_input.get("file_path")
