@@ -42,10 +42,14 @@ class PermissionPolicy:
         writable_roots: list[Path] | None = None,
         allow_network: bool = False,
         allow_execute: bool = True,
+        allow_git_write: bool = False,
+        allow_dependency_install: bool = False,
     ) -> None:
         self._writable_roots = [r.resolve() for r in (writable_roots or [])]
         self._allow_network = allow_network
         self._allow_execute = allow_execute
+        self._allow_git_write = allow_git_write
+        self._allow_dependency_install = allow_dependency_install
 
     def evaluate(self, tool_name: str, permission: ToolPermission, tool_input: dict) -> Decision:
         caps = permission.capabilities
@@ -55,6 +59,12 @@ class PermissionPolicy:
 
         if Capability.EXECUTE in caps and not self._allow_execute:
             return Decision.deny("command execution is disabled")
+
+        if Capability.GIT_WRITE in caps and not self._allow_git_write:
+            return Decision.deny("git write operations are disabled")
+
+        if Capability.DEPENDENCY_INSTALL in caps and not self._allow_dependency_install:
+            return Decision.deny("dependency installation is disabled")
 
         if Capability.WRITE_FS in caps:
             target = tool_input.get("path") or tool_input.get("file_path")

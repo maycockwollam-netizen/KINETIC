@@ -40,10 +40,33 @@ The SDK wraps the Claude Code CLI over stdio. Build incrementally in 8 phases; *
 - Future "AI Company" layer (CEO, departments, payroll, investors, simulation) must sit
   ABOVE the coding-agent core — DO NOT implement it now, just leave room.
 
-## Phase 1 scope (current)
-Repository structure, config, SDK adapter, basic session, terminal+filesystem tools,
-permission policy, audit log, event bus, minimal CLI, tests for all of the above.
-DO NOT implement git/browser/dependency/project/memory/skills/web yet.
+## Phase 2 scope (current: DONE)
+Project manager (scan_project), workspace management (Workspace abstraction,
+no Docker — Phase 3 adds sandbox), Git tools (status/diff/log/branch/show/
+checkout/commit), dependency detection (pip/uv/poetry/npm/pnpm/yarn/cargo) +
+installation (workspace-bound, permission-gated, audited, events, timeout/cancel).
+New capabilities: GIT_READ/GIT_WRITE/DEPENDENCY_READ/DEPENDENCY_INSTALL/
+WORKSPACE_READ/WORKSPACE_WRITE. New errors: WorkspaceError/ProjectError/
+GitError/DependencyError. New events: PROJECT_SCANNED/WORKSPACE_CREATED/
+WORKSPACE_DELETED/GIT_COMMAND_STARTED/GIT_COMMAND_FINISHED/DEPENDENCY_DETECTED/
+DEPENDENCY_INSTALL_STARTED/DEPENDENCY_INSTALL_FINISHED. 16 tools registered.
+113 tests pass, ruff clean.
+
+## Phase 2 gotchas
+- Circular import: dependencies.installer imports tools.terminal; tools.project
+  imports dependencies.installer. Fixed by lazy-importing DependencyInstaller
+  inside ProjectTools.__init__. Keep that lazy import.
+- Git commits need an identity; inject `-c user.name=... -c user.email=...` for
+  git_commit only (never modify global/repo config).
+- safe_resolve blocks symlink escapes only when the symlink target is genuinely
+  outside the workspace root — tests must place targets as siblings, not inside.
+- DependencyError does NOT take a `workspace=` kwarg (uses ecosystem/command/exit_code).
+- PermissionPolicy now gates GIT_WRITE and DEPENDENCY_INSTALL (off by default);
+  SessionConfig has allow_git_write / allow_dependency_install flags.
+
+## TODO Phase 3
+Environment/sandbox/container runtime behind the Workspace interface; network
+policies; resource limits. Do NOT start until Phase 2 is committed & reported.
 
 ## Conventions
 - Package import root: `kinetic`. Source under `src/kinetic`.

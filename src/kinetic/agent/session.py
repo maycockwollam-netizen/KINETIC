@@ -17,6 +17,8 @@ from kinetic.events import EventBus
 from kinetic.security import AuditLog, PermissionPolicy
 from kinetic.tools.base import ToolDefinition, ToolRegistry
 from kinetic.tools.filesystem import filesystem_tools
+from kinetic.tools.git import git_tools
+from kinetic.tools.project import project_tools
 from kinetic.tools.terminal import CancellationToken, terminal_tool
 
 
@@ -30,6 +32,8 @@ class SessionConfig:
     max_turns: int | None = 40
     system_prompt: str | None = None
     allow_network: bool = False
+    allow_git_write: bool = False
+    allow_dependency_install: bool = False
 
 
 @dataclass
@@ -58,12 +62,14 @@ class AgentSession:
         self.cancellation = cancellation or CancellationToken()
         self.events = EventBus()
         self.audit = AuditLog(settings.audit_log_path)
-        self.registry = self._build_registry(cfg.workspace)
         self.policy = PermissionPolicy(
             writable_roots=settings.writable_roots() + [cfg.workspace.resolve()],
             allow_network=cfg.allow_network,
             allow_execute=True,
+            allow_git_write=cfg.allow_git_write,
+            allow_dependency_install=cfg.allow_dependency_install,
         )
+        self.registry = self._build_registry(cfg.workspace)
         self._adapter: AgentAdapter | None = None
 
     def _build_registry(self, workspace: Path) -> ToolRegistry:
@@ -77,6 +83,26 @@ class AgentSession:
                 max_timeout=self.settings.max_command_timeout,
             )
         )
+        for t in git_tools(
+            workspace=workspace,
+            policy=self.policy,
+            audit=self.audit,
+            events=self.events,
+            session_id=self.session_id,
+            default_timeout=self.settings.default_command_timeout,
+            max_timeout=self.settings.max_command_timeout,
+        ):
+            registry.register(t)
+        for t in project_tools(
+            workspace=workspace,
+            policy=self.policy,
+            audit=self.audit,
+            events=self.events,
+            session_id=self.session_id,
+            default_timeout=self.settings.default_command_timeout,
+            max_timeout=self.settings.max_command_timeout,
+        ):
+            registry.register(t)
         return registry
 
     def build_adapter(self) -> AgentAdapter:
@@ -129,11 +155,33 @@ def build_session(settings: Settings, cfg: SessionConfig) -> AgentSession:
 
 
 def default_tools_for(workspace: Path, settings: Settings) -> list[ToolDefinition]:
-    """Return the Phase 1 tool set for a workspace (used by tests)."""
-    tools = filesystem_tools(workspace)
+    """Return the full registered tool set for a workspace (used by tests)."""
+    from kinetic.security import AuditLog, PermissionPolicy
+
+    policy = PermissionPolicy(writable_roots=[workspace.resolve()])
+    audit = AuditLog(settings.audit_log_path)
+    tools: list[ToolDefinition] = filesystem_tools(workspace)
     tools.append(
         terminal_tool(
             cwd=str(workspace),
+            default_timeout=settings.default_command_timeout,
+            max_timeout=settings.max_command_timeout,
+        )
+    )
+    tools.extend(
+        git_tools(
+            workspace=workspace,
+            policy=policy,
+            audit=audit,
+            default_timeout=settings.default_command_timeout,
+            max_timeout=settings.max_command_timeout,
+        )
+    )
+    tools.extend(
+        project_tools(
+            workspace=workspace,
+            policy=policy,
+            audit=audit,
             default_timeout=settings.default_command_timeout,
             max_timeout=settings.max_command_timeout,
         )

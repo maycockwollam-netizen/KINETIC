@@ -2,12 +2,35 @@
 
 from kinetic.security.audit import AuditLog
 from kinetic.security.permissions import Decision, PermissionPolicy
-from kinetic.security.policy import Capability, ToolPermission
+from kinetic.security.policy import (
+    DEPENDENCY_INSTALL,
+    DEPENDENCY_READ,
+    EXECUTE,
+    FILE_WRITE,
+    GIT_READ,
+    GIT_WRITE,
+    NETWORK,
+    READ_ONLY,
+    WORKSPACE_READ,
+    WORKSPACE_WRITE,
+    Capability,
+    ToolPermission,
+)
 
 __all__ = [
     "AuditLog",
     "Capability",
     "Decision",
+    "DEPENDENCY_INSTALL",
+    "DEPENDENCY_READ",
+    "EXECUTE",
+    "FILE_WRITE",
+    "GIT_READ",
+    "GIT_WRITE",
+    "NETWORK",
     "PermissionPolicy",
+    "READ_ONLY",
     "ToolPermission",
+    "WORKSPACE_READ",
+    "WORKSPACE_WRITE",
 ]

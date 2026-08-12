@@ -45,5 +45,45 @@ class EnvironmentError_(KINETICError):  # noqa: N801 - avoid shadowing builtin i
     """The environment/sandbox subsystem failed."""
 
 
+class WorkspaceError(EnvironmentError_):
+    """A workspace operation failed (creation, cleanup, path validation)."""
+
+    def __init__(self, workspace: str, message: str) -> None:
+        self.workspace = workspace
+        super().__init__(f"[workspace {workspace}] {message}")
+
+
+class ProjectError(KINETICError):
+    """Project scanning or metadata failed."""
+
+
+class GitError(KINETICError):
+    """A Git operation failed."""
+
+    def __init__(self, operation: str, message: str, *, exit_code: int | None = None) -> None:
+        self.operation = operation
+        self.exit_code = exit_code
+        suffix = f" (exit {exit_code})" if exit_code is not None else ""
+        super().__init__(f"[git {operation}] {message}{suffix}")
+
+
+class DependencyError(KINETICError):
+    """Dependency detection or installation failed."""
+
+    def __init__(self, message: str, *, ecosystem: str | None = None, command: str | None = None,
+                 exit_code: int | None = None) -> None:
+        self.ecosystem = ecosystem
+        self.command = command
+        self.exit_code = exit_code
+        parts = [message]
+        if ecosystem:
+            parts.append(f"ecosystem={ecosystem}")
+        if command:
+            parts.append(f"command={command}")
+        if exit_code is not None:
+            parts.append(f"exit={exit_code}")
+        super().__init__(": ".join(parts))
+
+
 class StorageError(KINETICError):
     """Persistent storage failed."""

@@ -27,6 +27,15 @@ class EventType(StrEnum):
     TEST_FINISHED = "test_finished"
     TASK_COMPLETED = "task_completed"
     SESSION_COMPACTED = "session_compacted"
+    # Phase 2
+    PROJECT_SCANNED = "project_scanned"
+    WORKSPACE_CREATED = "workspace_created"
+    WORKSPACE_DELETED = "workspace_deleted"
+    GIT_COMMAND_STARTED = "git_command_started"
+    GIT_COMMAND_FINISHED = "git_command_finished"
+    DEPENDENCY_DETECTED = "dependency_detected"
+    DEPENDENCY_INSTALL_STARTED = "dependency_install_started"
+    DEPENDENCY_INSTALL_FINISHED = "dependency_install_finished"
 
 
 @dataclass

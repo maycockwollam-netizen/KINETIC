@@ -21,6 +21,13 @@ class Capability(Flag):
     NETWORK = auto()
     GIT = auto()
     BROWSER = auto()
+    # Phase 2 fine-grained capabilities
+    GIT_READ = auto()
+    GIT_WRITE = auto()
+    DEPENDENCY_READ = auto()
+    DEPENDENCY_INSTALL = auto()
+    WORKSPACE_READ = auto()
+    WORKSPACE_WRITE = auto()
 
 
 @dataclass(frozen=True)
@@ -63,4 +70,47 @@ NETWORK = ToolPermission(
     capabilities=Capability.NETWORK,
     description="Network access (off by default; must be explicitly enabled).",
     destructive=False,
+)
+
+#: Read-only Git inspection (status, diff, log, branch, show).
+GIT_READ = ToolPermission(
+    capabilities=Capability.GIT_READ | Capability.GIT | Capability.READ_FS,
+    description="Read-only Git operations within the workspace.",
+    destructive=False,
+)
+
+#: Git mutations (checkout, commit). Default off; enabled per-session.
+GIT_WRITE = ToolPermission(
+    capabilities=Capability.GIT_WRITE | Capability.GIT | Capability.WRITE_FS,
+    description="Git write operations (checkout, commit) within the workspace.",
+    destructive=True,
+)
+
+#: Dependency detection only (read manifests/lockfiles).
+DEPENDENCY_READ = ToolPermission(
+    capabilities=Capability.DEPENDENCY_READ | Capability.READ_FS,
+    description="Read dependency manifests and lockfiles.",
+    destructive=False,
+)
+
+#: Dependency installation (executes a package manager).
+DEPENDENCY_INSTALL = ToolPermission(
+    capabilities=Capability.DEPENDENCY_INSTALL | Capability.EXECUTE,
+    description="Install dependencies using the detected package manager.",
+    destructive=True,
+    constraints={"requires_timeout": True, "workspace_only": True},
+)
+
+#: Workspace inspection.
+WORKSPACE_READ = ToolPermission(
+    capabilities=Capability.WORKSPACE_READ | Capability.READ_FS,
+    description="Read workspace metadata and structure.",
+    destructive=False,
+)
+
+#: Workspace creation/cleanup.
+WORKSPACE_WRITE = ToolPermission(
+    capabilities=Capability.WORKSPACE_WRITE | Capability.WRITE_FS,
+    description="Create or remove workspace directories.",
+    destructive=True,
 )
