@@ -68,6 +68,65 @@ DEPENDENCY_INSTALL_STARTED/DEPENDENCY_INSTALL_FINISHED. 16 tools registered.
 Environment/sandbox/container runtime behind the Workspace interface; network
 policies; resource limits. Do NOT start until Phase 2 is committed & reported.
 
+## Phase 3 scope (DONE)
+Sandboxed execution runtime behind the existing Workspace abstraction.
+Architecture: Agent -> ToolRegistry -> PermissionPolicy -> Tool -> Environment
+-> Runtime -> Process. Security enforced at runtime/tool layer, never prompts.
+- EnvironmentRuntime abstract interface (create/start/exec/stop/destroy/inspect);
+  only concrete runtimes know Docker. LocalRuntime (host subprocess, dev mode,
+  fail-closed on unenforceable limits) + DockerRuntime (real isolated sandbox:
+  --network none for DENY, --cpus/--memory/--pids-limit, bind-mount only
+  workspace + explicitly allowed mounts, filtered --env-file).
+- Environment: state machine CREATING/READY/RUNNING/STOPPING/STOPPED/FAILED/
+  DESTROYED with invalid-transition safety; owns workspace+runtime+config;
+  emits events + audit. `env.provision()` -> create+start; `env.exec(spec)`;
+  `env.stop()`/`env.destroy()`.
+- NetworkPolicy(DENY/ALLOW/RESTRICTED, default DENY), ResourceLimits(cpu/memory/
+  process_count/execution_timeout/disk), EnvironmentVariablePolicy(NO host env
+  forwarding; secret-NAME vars dropped entirely even if allowlisted; secret-shaped
+  VALUES redacted; explicit inject), ProcessSpec/ProcessResult(+ProcessState).
+- New capabilities: ENVIRONMENT_CREATE/EXEC/NETWORK/ADMIN (gated by
+  PermissionPolicy; network+admin off by default, create+exec on).
+- New errors: SandboxError/EnvironmentStateError/RuntimeUnavailableError.
+- New events: ENVIRONMENT_CREATED/STARTED/STOPPED/DESTROYED/FAILED,
+  PROCESS_STARTED/FINISHED/CANCELLED/TIMEOUT, PERMISSION_DENIED.
+- Settings: runtime_type/sandbox_mode/network_policy/cpu_limit/memory_limit_mb/
+  process_limit/execution_timeout/disk_limit_mb/allowed_env_vars/docker_image/
+  allow_environment_exec|network|admin. `settings.environment_config()`.
+- SessionConfig: runtime_type/sandbox_mode/network_policy/allow_environment_*.
+- TerminalTool: accepts optional `environment=`; routes through env.exec when
+  provided, else low-level run_command (backwards compat). AgentSession builds +
+  provisions the environment (fail-closed on provision) and tears it down in run().
+- CLI: --runtime/--network-policy options.
+- FAIL-CLOSED: local sandbox_mode=True + network DENY/RESTRICTED raises
+  SandboxError (can't enforce); docker unavailable raises RuntimeUnavailableError
+  (never falls back to host); unsupported limits raise rather than ignored.
+185 tests pass (113 Phase1/2 + 72 new). 10 Docker integration tests pass when
+daemon available (skipped otherwise). Ruff clean. Commit d93323c.
+
+## Phase 3 gotchas
+- LocalRuntime is honest: it provides NO fs/network isolation. With
+  sandbox_mode=False (dev) it proceeds with a recorded warning; with
+  sandbox_mode=True it fail-closes on network DENY/RESTRICTED + hard resource
+  limits. Docker is always sandbox_mode=True.
+- Docker daemon needs `sudo` in this sandbox: docker.py uses `_USE_SUDO=True`
+  prefix. Change to False on hosts where the user is in the docker group.
+- EnvVarPolicy drops secret-*named* vars entirely (not value-redacted); only
+  non-secret-named vars with secret-shaped *values* get value-redacted.
+- DockerRuntime.exec runs commands via `sh -c` inside the container at /workspace.
+  Spec cwd is mapped workspace-relative to /workspace/<rel> (traversal rejected).
+- RESTRICTED network with rules raises (no proxy infra); without rules falls
+  back to DENY (--network none). disk_bytes always raises (daemon storage-opt
+  unsupported) — fail closed.
+- AgentSession.run() provisions environment before the model run and stops/
+  destroys it after; provisioning failure returns a SessionResult with an error
+  (no model call attempted).
+- Lazy runtime import: environment.environment._select_runtime imports
+  LocalRuntime/DockerRuntime lazily so the local path stays Docker-free.
+
+## TODO Phase 4
+Not started. Do NOT implement until Phase 3 is committed & reported.
+
 ## Conventions
 - Package import root: `kinetic`. Source under `src/kinetic`.
 - Use `pydantic` v2 for structured data/config. Use `anyio` for async (SDK uses anyio).
