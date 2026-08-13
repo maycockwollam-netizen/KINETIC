@@ -6,7 +6,7 @@ extraction plus graceful fallback for unknown formats.
 
 from __future__ import annotations
 
-from kinetic.intelligence.parsers import (
+from intelligence.parsers import (
     analyze_test_output,
     parse_cargo,
     parse_generic,

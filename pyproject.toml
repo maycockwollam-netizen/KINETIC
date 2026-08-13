@@ -27,10 +27,32 @@ dev = [
 ]
 
 [project.scripts]
-kinetic = "kinetic.cli.main:main"
+kinetic = "cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["kinetic"]
+# Phase 7.2: the application source lives as top-level packages/modules at the
+# repository root (the `kinetic` namespace was intentionally removed). List the
+# packages and the loose root-level modules explicitly so the wheel ships exactly
+# the application source — no tests/, no .venv/, no build artifacts.
+only-include = [
+    "agent",
+    "cli",
+    "config",
+    "context",
+    "dependencies",
+    "environment",
+    "events",
+    "intelligence",
+    "memory",
+    "observability",
+    "project",
+    "security",
+    "tasks",
+    "tools",
+    "errors.py",
+    "lifecycle.py",
+    "paths.py",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

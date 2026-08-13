@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from kinetic.errors import CheckpointError
-from kinetic.intelligence.models import RepairState, StuckSignal
-from kinetic.tasks.checkpoints import (
+from errors import CheckpointError
+from intelligence.models import RepairState, StuckSignal
+from tasks.checkpoints import (
     CheckpointStore,
     build_checkpoint,
     restore_checkpoint,
     restore_repair_state,
 )
-from kinetic.tasks.models import Plan, Task
-from kinetic.tasks.states import TaskState
+from tasks.models import Plan, Task
+from tasks.states import TaskState
 
 
 def _task(tmp_path) -> Task:
@@ -21,7 +21,7 @@ def _task(tmp_path) -> Task:
 
 
 def _plan() -> Plan:
-    from kinetic.tasks.models import PlanStep
+    from tasks.models import PlanStep
 
     return Plan(plan_id="p1", task_id="t1", steps=[PlanStep(step_id="s1")])
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from kinetic.events import EventBus, EventType
+from events import EventBus, EventType
 
 
 @pytest.mark.timeout(5)

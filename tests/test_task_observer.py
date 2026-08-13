@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kinetic.tasks.observer import Observer, summarize
+from tasks.observer import Observer, summarize
 
 
 class TestObserver:

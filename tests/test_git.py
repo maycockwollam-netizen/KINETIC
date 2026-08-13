@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import GitError, PermissionDeniedError
-from kinetic.events import EventBus, EventType
-from kinetic.security import AuditLog, PermissionPolicy
-from kinetic.tools.git import GitTools, git_tools
+from errors import GitError, PermissionDeniedError
+from events import EventBus, EventType
+from security import AuditLog, PermissionPolicy
+from tools.git import GitTools, git_tools
 
 
 def _git(root: Path, *args: str) -> str:
@@ -210,7 +210,7 @@ async def test_git_command_timeout(repo: Path):
     # to trigger the timeout. Use a named pipe as a fake remote.
     import os
 
-    from kinetic.security.policy import GIT_READ
+    from security.policy import GIT_READ
 
     fifo = repo / "fake.git"
     os.mkfifo(fifo)

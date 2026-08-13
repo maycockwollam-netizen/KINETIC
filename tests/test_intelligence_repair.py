@@ -13,18 +13,18 @@ from typing import Any
 
 import pytest
 
-from kinetic.environment import Environment
-from kinetic.environment.config import RUNTIME_LOCAL, EnvironmentConfig
-from kinetic.environment.network import NetworkPolicy
-from kinetic.errors import PermissionDeniedError, VerificationError
-from kinetic.events import EventBus
-from kinetic.intelligence.analyzer import FailureAnalyzer
-from kinetic.intelligence.diff import ChangeAnalyzer
-from kinetic.intelligence.regression import RegressionChecker
-from kinetic.intelligence.repair import RepairContextBuilder, RepairCoordinator
-from kinetic.intelligence.stuck import StuckDetector
-from kinetic.tasks.policies import VerificationOutcome
-from kinetic.tasks.verifier import VerificationResult, Verifier
+from environment import Environment
+from environment.config import RUNTIME_LOCAL, EnvironmentConfig
+from environment.network import NetworkPolicy
+from errors import PermissionDeniedError, VerificationError
+from events import EventBus
+from intelligence.analyzer import FailureAnalyzer
+from intelligence.diff import ChangeAnalyzer
+from intelligence.regression import RegressionChecker
+from intelligence.repair import RepairContextBuilder, RepairCoordinator
+from intelligence.stuck import StuckDetector
+from tasks.policies import VerificationOutcome
+from tasks.verifier import VerificationResult, Verifier
 
 
 class FakeRepairRunner:
@@ -284,7 +284,7 @@ class TestRepairContextBounded:
     def test_context_includes_previous_attempts(self) -> None:
         analyzer = FailureAnalyzer(max_stdout_chars=400, max_stderr_chars=400)
         analysis = analyzer.analyze(command="pytest", exit_code=1, stdout="FAILED tests/x.py::test_a\n1 failed")
-        from kinetic.intelligence.models import RepairAttempt
+        from intelligence.models import RepairAttempt
 
         builder = RepairContextBuilder()
         ctx = builder.build(

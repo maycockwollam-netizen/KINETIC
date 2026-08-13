@@ -12,20 +12,20 @@ from typing import Any
 
 import pytest
 
-from kinetic.environment import Environment
-from kinetic.environment.config import RUNTIME_LOCAL, EnvironmentConfig
-from kinetic.environment.network import NetworkPolicy
-from kinetic.errors import OrchestrationError
-from kinetic.events import EventBus
-from kinetic.security import AuditLog
-from kinetic.tasks.executor import ExecutionController, StepRunner
-from kinetic.tasks.manager import TaskManager
-from kinetic.tasks.models import Plan, PlanStep
-from kinetic.tasks.observer import Observer
-from kinetic.tasks.policies import RecoveryPolicy, RetryLimits
-from kinetic.tasks.recovery import RecoveryCoordinator
-from kinetic.tasks.states import TaskState
-from kinetic.tasks.verifier import Verifier
+from environment import Environment
+from environment.config import RUNTIME_LOCAL, EnvironmentConfig
+from environment.network import NetworkPolicy
+from errors import OrchestrationError
+from events import EventBus
+from security import AuditLog
+from tasks.executor import ExecutionController, StepRunner
+from tasks.manager import TaskManager
+from tasks.models import Plan, PlanStep
+from tasks.observer import Observer
+from tasks.policies import RecoveryPolicy, RetryLimits
+from tasks.recovery import RecoveryCoordinator
+from tasks.states import TaskState
+from tasks.verifier import Verifier
 
 
 class FakeStepRunner:

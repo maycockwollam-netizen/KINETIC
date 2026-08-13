@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.environment import (
+from environment import (
     Environment,
     EnvironmentConfig,
     EnvironmentState,
     NetworkPolicy,
     ProcessSpec,
 )
-from kinetic.environment.local import LocalRuntime
-from kinetic.environment.runtime import EnvironmentRuntime, RuntimeStatus
-from kinetic.errors import EnvironmentStateError, SandboxError
-from kinetic.events import EventBus, EventType
+from environment.local import LocalRuntime
+from environment.runtime import EnvironmentRuntime, RuntimeStatus
+from errors import EnvironmentStateError, SandboxError
+from events import EventBus, EventType
 
 
 def _local_config(**kw) -> EnvironmentConfig:
@@ -81,7 +81,7 @@ async def test_environment_timeout_event(tmp_path: Path):
     await env.provision()
     res = await env.exec(ProcessSpec(command="sleep 5", timeout=0.3))
     assert res.timed_out
-    assert res.state is __import__("kinetic.environment.process", fromlist=["ProcessState"]).ProcessState.TIMED_OUT
+    assert res.state is __import__("environment.process", fromlist=["ProcessState"]).ProcessState.TIMED_OUT
     assert any(e.type is EventType.PROCESS_TIMEOUT for e in bus.history)
 
 
@@ -102,7 +102,7 @@ async def test_environment_emits_lifecycle_events(tmp_path: Path):
 
 
 async def test_environment_audit_records_exec(tmp_path: Path):
-    from kinetic.security import AuditLog
+    from security import AuditLog
 
     audit = AuditLog(tmp_path / "audit.log")
     env = Environment.create(tmp_path / "ws", _local_config(), audit=audit, session_id="s1")

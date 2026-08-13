@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import TaskStateError
-from kinetic.events import EventBus
-from kinetic.security import AuditLog
-from kinetic.tasks.manager import TaskManager
-from kinetic.tasks.models import TaskFailure
-from kinetic.tasks.states import TaskState
+from errors import TaskStateError
+from events import EventBus
+from security import AuditLog
+from tasks.manager import TaskManager
+from tasks.models import TaskFailure
+from tasks.states import TaskState
 
 
 @pytest.fixture

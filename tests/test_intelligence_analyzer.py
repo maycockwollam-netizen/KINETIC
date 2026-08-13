@@ -6,9 +6,9 @@ secret masking. No execution, no model.
 
 from __future__ import annotations
 
-from kinetic.events import EventBus
-from kinetic.intelligence.analyzer import FailureAnalyzer, analysis_from_dict, failure_signature
-from kinetic.tasks.policies import FailureClass
+from events import EventBus
+from intelligence.analyzer import FailureAnalyzer, analysis_from_dict, failure_signature
+from tasks.policies import FailureClass
 
 
 def _analyzer(events: EventBus | None = None) -> FailureAnalyzer:

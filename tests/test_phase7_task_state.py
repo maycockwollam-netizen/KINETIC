@@ -10,15 +10,15 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import CheckpointError, TaskStateError
-from kinetic.tasks.checkpoints import (
+from errors import CheckpointError, TaskStateError
+from tasks.checkpoints import (
     CheckpointStore,
     build_checkpoint,
     restore_checkpoint,
     restore_repair_state,
 )
-from kinetic.tasks.models import Plan, Task
-from kinetic.tasks.states import (
+from tasks.models import Plan, Task
+from tasks.states import (
     TERMINAL_STATES,
     TaskState,
     require_transition,
@@ -149,6 +149,6 @@ class TestTaskIdIntegrity:
         assert t1.id != t2.id
 
     def test_workspace_id_distinct(self) -> None:
-        from kinetic.tasks.manager import workspace_project_id
+        from tasks.manager import workspace_project_id
 
         assert workspace_project_id("/ws/a") != workspace_project_id("/ws/b")

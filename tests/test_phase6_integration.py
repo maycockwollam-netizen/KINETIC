@@ -22,13 +22,13 @@ from typing import Any
 
 import pytest
 
-from kinetic.agent.session import AgentSession, SessionConfig
-from kinetic.config import Settings
-from kinetic.environment import EnvironmentState
-from kinetic.project.scanner import scan_project
-from kinetic.tasks.models import Plan, PlanStep
-from kinetic.tasks.orchestrator import Orchestrator
-from kinetic.tasks.states import TaskState
+from agent.session import AgentSession, SessionConfig
+from config import Settings
+from environment import EnvironmentState
+from project.scanner import scan_project
+from tasks.models import Plan, PlanStep
+from tasks.orchestrator import Orchestrator
+from tasks.states import TaskState
 
 
 def _settings(tmp_path: Path, **kw) -> Settings:
@@ -116,14 +116,14 @@ class ScriptedVerifier:
 
 
 def _passed_vr():
-    from kinetic.tasks.policies import VerificationOutcome
-    from kinetic.tasks.verifier import VerificationResult
+    from tasks.policies import VerificationOutcome
+    from tasks.verifier import VerificationResult
     return VerificationResult(outcome=VerificationOutcome.PASS, command="true", exit_code=0)
 
 
 def _failed_vr():
-    from kinetic.tasks.policies import VerificationOutcome
-    from kinetic.tasks.verifier import VerificationResult
+    from tasks.policies import VerificationOutcome
+    from tasks.verifier import VerificationResult
     return VerificationResult(
         outcome=VerificationOutcome.FAIL, command="false", exit_code=1,
         stderr="verification failed", reason="failed",
@@ -192,7 +192,7 @@ class TestRepairIntegration:
             [{"success": True, "exit_code": 0}] * 3
         )
         await orch.run_task(user_request="x", workspace=str(workspace), task_id="t1")
-        from kinetic.tasks.checkpoints import restore_repair_state
+        from tasks.checkpoints import restore_repair_state
 
         assert orch.manager._store is not None
         assert orch.manager._store.exists("t1")
@@ -227,10 +227,10 @@ class TestSecurityBoundaries:
 
     async def test_no_direct_subprocess_in_intelligence_layer(self) -> None:
         """The intelligence package must not import subprocess or call git directly."""
-        import kinetic.intelligence.analyzer as analyzer
-        import kinetic.intelligence.diff as diff
-        import kinetic.intelligence.repair as repair
-        import kinetic.intelligence.review as review
+        import intelligence.analyzer as analyzer
+        import intelligence.diff as diff
+        import intelligence.repair as repair
+        import intelligence.review as review
 
         for mod in (analyzer, diff, repair, review):
             assert not hasattr(mod, "subprocess"), f"{mod.__name__} must not use subprocess"

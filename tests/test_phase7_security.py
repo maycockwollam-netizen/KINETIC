@@ -12,18 +12,38 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import PermissionDeniedError
-from kinetic.security import PermissionPolicy
-from kinetic.security.policy import ENVIRONMENT_EXEC, EXECUTE, FILE_WRITE
+from errors import PermissionDeniedError
+from security import PermissionPolicy
+from security.policy import ENVIRONMENT_EXEC, EXECUTE, FILE_WRITE
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "kinetic"
+# Application source now lives at the repository root as top-level packages
+# (Phase 7.2 namespace flattening). Scan exactly those source roots + the
+# top-level modules, excluding tests/, .venv/, build artifacts.
+_ROOT = Path(__file__).resolve().parent.parent
+_SOURCE_DIRS = [
+    "agent", "cli", "config", "context", "dependencies", "environment",
+    "events", "intelligence", "memory", "observability", "project", "security",
+    "tasks", "tools",
+]
+_SOURCE_MODULES = ["errors.py", "lifecycle.py", "paths.py"]
+
+
+def _source_py_files() -> list[Path]:
+    files: list[Path] = []
+    for d in _SOURCE_DIRS:
+        files.extend(sorted((_ROOT / d).rglob("*.py")))
+    for m in _SOURCE_MODULES:
+        f = _ROOT / m
+        if f.exists():
+            files.append(f)
+    return files
 
 
 class TestNoUnsafePatterns:
     """Grep the source for unsafe execution patterns."""
 
     def _py_files(self) -> list[Path]:
-        return list(SRC.rglob("*.py"))
+        return _source_py_files()
 
     def _grep(self, pattern: str) -> list[str]:
         results: list[str] = []
@@ -114,34 +134,34 @@ class TestPathSafety:
     """safe_resolve must reject all escape attempts."""
 
     def test_traversal_rejected(self, tmp_path: Path) -> None:
-        from kinetic.errors import SecurityError
-        from kinetic.paths import safe_resolve
+        from errors import SecurityError
+        from paths import safe_resolve
 
         with pytest.raises(SecurityError):
             safe_resolve(tmp_path, "../../etc/passwd")
 
     def test_absolute_outside_rejected(self, tmp_path: Path) -> None:
-        from kinetic.errors import SecurityError
-        from kinetic.paths import safe_resolve
+        from errors import SecurityError
+        from paths import safe_resolve
 
         with pytest.raises(SecurityError):
             safe_resolve(tmp_path, "/etc/passwd")
 
     def test_absolute_inside_allowed(self, tmp_path: Path) -> None:
-        from kinetic.paths import safe_resolve
+        from paths import safe_resolve
 
         result = safe_resolve(tmp_path, str(tmp_path / "file.txt"))
         assert result == (tmp_path / "file.txt").resolve()
 
     def test_relative_resolved(self, tmp_path: Path) -> None:
-        from kinetic.paths import safe_resolve
+        from paths import safe_resolve
 
         result = safe_resolve(tmp_path, "subdir/file.txt")
         assert result == (tmp_path / "subdir" / "file.txt").resolve()
 
     def test_symlink_escape_rejected(self, tmp_path: Path) -> None:
-        from kinetic.errors import SecurityError
-        from kinetic.paths import safe_resolve
+        from errors import SecurityError
+        from paths import safe_resolve
 
         # Create a symlink inside the workspace pointing outside.
         outside = tmp_path.parent / "outside_target"
@@ -152,7 +172,7 @@ class TestPathSafety:
             safe_resolve(tmp_path, "escape/secret")
 
     def test_is_within(self, tmp_path: Path) -> None:
-        from kinetic.paths import is_within
+        from paths import is_within
 
         assert is_within(tmp_path, tmp_path / "sub" / "file")
         assert not is_within(tmp_path, tmp_path.parent / "other")

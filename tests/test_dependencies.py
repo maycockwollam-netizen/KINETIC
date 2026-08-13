@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.dependencies import (
+from dependencies import (
     DependencyInstaller,
     detect_dependencies,
     detect_primary,
 )
-from kinetic.dependencies.adapters import NpmAdapter, UvAdapter
-from kinetic.errors import DependencyError, PermissionDeniedError
-from kinetic.events import EventBus, EventType
-from kinetic.security import AuditLog, PermissionPolicy
+from dependencies.adapters import NpmAdapter, UvAdapter
+from errors import DependencyError, PermissionDeniedError
+from events import EventBus, EventType
+from security import AuditLog, PermissionPolicy
 
 
 def _write(root: Path, name: str, content: str = "") -> None:
@@ -142,7 +142,7 @@ async def test_installer_rejects_outside_workspace(tmp_path: Path):
     audit = AuditLog(tmp_path / "audit.log")
     policy = PermissionPolicy(writable_roots=[tmp_path], allow_dependency_install=True)
     installer = DependencyInstaller(workspace=tmp_path, policy=policy, audit=audit)
-    from kinetic.dependencies.detector import detect_primary
+    from dependencies.detector import detect_primary
 
     info = detect_primary(other)
     with pytest.raises(DependencyError, match="outside the managed workspace"):

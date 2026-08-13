@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from kinetic.errors import MemoryError, MemorySecurityError
-from kinetic.events import EventBus, EventType
-from kinetic.memory import (
+from errors import MemoryError, MemorySecurityError
+from events import EventBus, EventType
+from memory import (
     DeterministicEmbeddingProvider,
     MemoryManager,
     MemoryRecord,
@@ -19,9 +19,9 @@ from kinetic.memory import (
     Retriever,
     SQLiteStore,
 )
-from kinetic.memory.metadata import MemoryFilter, SecretDetector
-from kinetic.memory.models import compute_content_hash
-from kinetic.security import AuditLog
+from memory.metadata import MemoryFilter, SecretDetector
+from memory.models import compute_content_hash
+from security import AuditLog
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -273,7 +273,7 @@ class TestRanking:
     def test_confidence_modulates(self) -> None:
         from datetime import UTC, datetime
 
-        from kinetic.memory.models import RankedMemory
+        from memory.models import RankedMemory
 
         ranker = Ranker()
         rec_high = MemoryRecord(id="h", content="x", memory_type=MemoryScope.PROJECT, confidence=1.0, importance=0.5)

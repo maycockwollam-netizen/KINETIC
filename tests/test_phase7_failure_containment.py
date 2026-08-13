@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import PermissionDeniedError, SandboxError
-from kinetic.events import EventBus, EventType
-from kinetic.security import AuditLog, PermissionPolicy
-from kinetic.tasks.states import TaskState
+from errors import PermissionDeniedError, SandboxError
+from events import EventBus, EventType
+from security import AuditLog, PermissionPolicy
+from tasks.states import TaskState
 
 
 class TestEventBusFailureContainment:
@@ -36,7 +36,7 @@ class TestEventBusFailureContainment:
 
 class TestToolFailureContainment:
     async def test_tool_failure_does_not_bypass_permissions(self, tmp_path: Path) -> None:
-        from kinetic.tools.terminal import terminal_tool
+        from tools.terminal import terminal_tool
 
         policy = PermissionPolicy(writable_roots=[tmp_path], allow_execute=False)
         AuditLog(tmp_path / "audit.log")
@@ -49,9 +49,9 @@ class TestToolFailureContainment:
 
 class TestEnvironmentFailureContainment:
     async def test_environment_failure_does_not_host_fallback(self, tmp_path: Path) -> None:
-        from kinetic.environment import Environment
-        from kinetic.environment.config import EnvironmentConfig
-        from kinetic.environment.network import NetworkPolicy
+        from environment import Environment
+        from environment.config import EnvironmentConfig
+        from environment.network import NetworkPolicy
 
         # sandbox_mode=True + network DENY on local runtime must raise, not
         # silently fall back to host execution.
@@ -67,9 +67,9 @@ class TestEnvironmentFailureContainment:
 
 class TestCleanupFailureObservable:
     async def test_destroy_failure_emits_event(self, tmp_path: Path) -> None:
-        from kinetic.environment import Environment
-        from kinetic.environment.config import EnvironmentConfig
-        from kinetic.environment.runtime import EnvironmentRuntime, RuntimeStatus
+        from environment import Environment
+        from environment.config import EnvironmentConfig
+        from environment.runtime import EnvironmentRuntime, RuntimeStatus
 
         class FailingRuntime(EnvironmentRuntime):
             runtime_type = "failing"
@@ -104,9 +104,9 @@ class TestCleanupFailureObservable:
 
 class TestTaskFailureDoesNotCorruptGlobal:
     def test_one_task_failure_does_not_affect_others(self) -> None:
-        from kinetic.events import EventBus
-        from kinetic.tasks.manager import TaskManager
-        from kinetic.tasks.models import TaskFailure
+        from events import EventBus
+        from tasks.manager import TaskManager
+        from tasks.models import TaskFailure
 
         bus = EventBus()
         mgr = TaskManager(events=bus)

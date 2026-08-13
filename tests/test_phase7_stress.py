@@ -10,13 +10,13 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from kinetic.events import EventBus, EventType
-from kinetic.memory.embeddings import DeterministicEmbeddingProvider
-from kinetic.memory.models import MemoryRecord
-from kinetic.memory.store import SQLiteStore
-from kinetic.tasks.checkpoints import build_checkpoint
-from kinetic.tasks.models import Plan, Task
-from kinetic.tasks.states import TaskState, transition_allowed
+from events import EventBus, EventType
+from memory.embeddings import DeterministicEmbeddingProvider
+from memory.models import MemoryRecord
+from memory.store import SQLiteStore
+from tasks.checkpoints import build_checkpoint
+from tasks.models import Plan, Task
+from tasks.states import TaskState, transition_allowed
 
 
 class TestEventBusStress:
@@ -47,7 +47,7 @@ class TestEventBusStress:
 class TestMemoryStress:
     def test_many_records(self, tmp_path: Path) -> None:
         store = SQLiteStore(tmp_path / "stress.db")
-        from kinetic.memory.models import MemoryScope
+        from memory.models import MemoryScope
 
         for i in range(500):
             store.put(MemoryRecord(id=f"m{i}", content=f"record {i}",
@@ -56,7 +56,7 @@ class TestMemoryStress:
 
     def test_search_bounded_under_load(self, tmp_path: Path) -> None:
         store = SQLiteStore(tmp_path / "stress.db")
-        from kinetic.memory.models import MemoryScope
+        from memory.models import MemoryScope
 
         for i in range(1000):
             store.put(MemoryRecord(id=f"m{i}", content=f"searchable item {i}",
@@ -87,9 +87,9 @@ class TestTaskStateStress:
             assert not transition_allowed(state, target)
 
     def test_repeated_failures_terminate(self) -> None:
-        from kinetic.events import EventBus
-        from kinetic.tasks.manager import TaskManager
-        from kinetic.tasks.models import TaskFailure
+        from events import EventBus
+        from tasks.manager import TaskManager
+        from tasks.models import TaskFailure
 
         bus = EventBus()
         mgr = TaskManager(events=bus)
@@ -103,7 +103,7 @@ class TestTaskStateStress:
 
 class TestCheckpointStress:
     def test_rapid_writes_atomic(self, tmp_path: Path) -> None:
-        from kinetic.tasks.checkpoints import CheckpointStore
+        from tasks.checkpoints import CheckpointStore
 
         store = CheckpointStore(tmp_path / "ckpts")
         for i in range(100):
@@ -118,8 +118,8 @@ class TestCheckpointStress:
 
 class TestContextAssemblyStress:
     async def test_large_context_bounded(self, tmp_path: Path) -> None:
-        from kinetic.context.budget import ContextBudget
-        from kinetic.context.engine import ContextEngine
+        from context.budget import ContextBudget
+        from context.engine import ContextEngine
 
         budget = ContextBudget(
             max_memory_items=5, max_characters=500,
@@ -137,7 +137,7 @@ class TestContextAssemblyStress:
 
 class TestLargeOutputStress:
     async def test_large_tool_output_bounded(self, tmp_path: Path) -> None:
-        from kinetic.tasks.observer import Observer
+        from tasks.observer import Observer
 
         obs = Observer(max_stdout_chars=1000, max_stderr_chars=500)
         result = obs.observe(

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.environment import Workspace, WorkspaceStatus
-from kinetic.errors import SecurityError, WorkspaceError
+from environment import Workspace, WorkspaceStatus
+from errors import SecurityError, WorkspaceError
 
 
 def test_create_workspace(tmp_path: Path):
@@ -130,7 +130,7 @@ def test_metadata(tmp_path: Path):
 
 
 def test_workspace_emits_events(tmp_path: Path):
-    from kinetic.events import EventBus, EventType
+    from events import EventBus, EventType
 
     bus = EventBus()
     ws = Workspace.create(tmp_path, name="evt", events=bus, session_id="s1")

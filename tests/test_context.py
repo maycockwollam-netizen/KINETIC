@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.context import ContextBudget, ContextEngine, ContextPackage
-from kinetic.events import EventBus, EventType
-from kinetic.memory import (
+from context import ContextBudget, ContextEngine, ContextPackage
+from events import EventBus, EventType
+from memory import (
     DeterministicEmbeddingProvider,
     MemoryManager,
     Ranker,
     Retriever,
     SQLiteStore,
 )
-from kinetic.memory.models import MemoryScope
-from kinetic.security import AuditLog
+from memory.models import MemoryScope
+from security import AuditLog
 
 
 @pytest.fixture

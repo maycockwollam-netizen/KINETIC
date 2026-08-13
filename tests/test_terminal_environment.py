@@ -7,9 +7,9 @@ from pathlib import Path
 import anyio
 import pytest
 
-from kinetic.environment import Environment, EnvironmentConfig, NetworkPolicy
-from kinetic.errors import ToolError
-from kinetic.tools.terminal import TerminalTool, terminal_tool
+from environment import Environment, EnvironmentConfig, NetworkPolicy
+from errors import ToolError
+from tools.terminal import TerminalTool, terminal_tool
 
 
 def _local_cfg(**kw) -> EnvironmentConfig:
@@ -84,7 +84,7 @@ async def test_run_command_cancellation_is_prompt(tmp_path: Path):
     import asyncio
     import time
 
-    from kinetic.tools.terminal import CancellationToken, run_command
+    from tools.terminal import CancellationToken, run_command
 
     cancel = CancellationToken()
     start = time.monotonic()
@@ -107,7 +107,7 @@ async def test_run_command_no_orphan_after_timeout(tmp_path: Path):
     """A timed-out child (e.g. ``sleep``) must not survive as an orphan."""
     import time
 
-    from kinetic.tools.terminal import run_command
+    from tools.terminal import run_command
 
     start = time.monotonic()
     # Use a distinctive duration so the orphan check can target it without

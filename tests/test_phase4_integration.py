@@ -14,13 +14,13 @@ from typing import Any
 
 import pytest
 
-from kinetic.agent.session import AgentSession, SessionConfig
-from kinetic.events import EventType
-from kinetic.memory.models import MemoryScope
+from agent.session import AgentSession, SessionConfig
+from events import EventType
+from memory.models import MemoryScope
 
 
 def _settings(tmp_path: Path):
-    from kinetic.config import Settings
+    from config import Settings
 
     s = Settings(
         workspace_root=tmp_path / "ws",
@@ -73,7 +73,7 @@ def test_session_builds_memory_and_context(tmp_path: Path, workspace: Path):
 
 
 def test_session_memory_permissions_default_off_for_write(tmp_path: Path, workspace: Path):
-    from kinetic.security import MEMORY_WRITE
+    from security import MEMORY_WRITE
 
     settings = _settings(tmp_path)
     cfg = SessionConfig(workspace=workspace, prompt="hi")
@@ -83,7 +83,7 @@ def test_session_memory_permissions_default_off_for_write(tmp_path: Path, worksp
 
 
 def test_session_memory_read_allowed_by_default(tmp_path: Path, workspace: Path):
-    from kinetic.security import MEMORY_READ
+    from security import MEMORY_READ
 
     settings = _settings(tmp_path)
     cfg = SessionConfig(workspace=workspace, prompt="hi")

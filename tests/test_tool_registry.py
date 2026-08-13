@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from kinetic.security.policy import READ_ONLY
-from kinetic.tools.base import ToolDefinition, ToolRegistry, tool_result
+from security.policy import READ_ONLY
+from tools.base import ToolDefinition, ToolRegistry, tool_result
 
 
 async def _noop(args):

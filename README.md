@@ -28,21 +28,25 @@ There is exactly one safe execution path. Security is enforced at the runtime/to
 
 ## Layout
 
-    kinetic/
-        agent/          Claude Agent SDK adapter + agent sessions
-        cli/            CLI entrypoint (run, task status/cancel/resume/inspect/failures/verify)
-        config/         layered configuration (env vars > config file > defaults)
-        context/        bounded context assembly engine
-        dependencies/   dependency detection + installation
-        environment/    sandboxed execution (local + Docker runtimes, diagnostics)
-        events/         bounded async event bus + serializable event types
-        intelligence/   failure analysis, repair, stuck detection, regression, review
-        memory/         hybrid-retrieval memory (SQLite + deterministic embeddings)
-        observability/  structured logging + metrics
-        security/       tool permissions, audit logging, secret detection
-        tasks/          task state machine, planner, executor, verifier, checkpoints
-        tools/          tool registry + terminal / filesystem / git / project / memory tools
-        lifecycle.py    graceful shutdown coordinator
+    agent/           Claude Agent SDK adapter + agent sessions
+    cli/             CLI entrypoint (run, task status/cancel/resume/inspect/failures/verify)
+    config/          layered configuration (env vars > config file > defaults)
+    context/         bounded context assembly engine
+    dependencies/    dependency detection + installation
+    environment/     sandboxed execution (local + Docker runtimes, diagnostics)
+    events/          bounded async event bus + serializable event types
+    intelligence/    failure analysis, repair, stuck detection, regression, review
+    memory/          hybrid-retrieval memory (SQLite + deterministic embeddings)
+    observability/   structured logging + metrics
+    security/        tool permissions, audit logging, secret detection
+    tasks/           task state machine, planner, executor, verifier, checkpoints
+    tools/           tool registry + terminal / filesystem / git / project / memory tools
+    errors.py        shared error types
+    lifecycle.py     graceful shutdown coordinator
+    paths.py         shared path-safety utilities
+
+The application source is laid out as top-level packages and modules at the
+repository root (the former `kinetic/` namespace was flattened in Phase 7.2).
 
 ## Security boundaries
 
@@ -83,12 +87,12 @@ Config file (JSON):
 
 Or programmatically:
 
-    from kinetic.config import load_settings
+    from config import load_settings
     settings = load_settings("settings.json")
 
 ## Observability
 
-- **Structured logging**: `kinetic.observability.configure()` installs a JSON formatter with correlation IDs (session/task/workspace) and secret redaction.
+- **Structured logging**: `observability.configure()` installs a JSON formatter with correlation IDs (session/task/workspace) and secret redaction.
 - **Metrics**: `MetricsCollector` tracks tasks, steps, verification, repair, environment, permissions. `snapshot()` returns a plain dict for export.
 - **Audit log**: append-only JSONL of security-sensitive operations.
 - **Event bus**: bounded async stream of structured events.
@@ -113,5 +117,5 @@ Live SDK integration tests run only when `ANTHROPIC_API_KEY` is set; otherwise t
 - Set `KINETIC_NETWORK_POLICY=deny` by default; allow only when needed.
 - Gate `GIT_WRITE`, `DEPENDENCY_INSTALL`, `MEMORY_WRITE` per session.
 - Monitor the metrics snapshot for task failure rates and repair attempts.
-- Use `kinetic.environment.diagnostics.find_stale_containers()` to detect leaked containers.
+- Use `environment.diagnostics.find_stale_containers()` to detect leaked containers.
 - Checkpoints are atomic and fail-closed on corruption.

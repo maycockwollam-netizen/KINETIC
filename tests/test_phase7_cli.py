@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from kinetic.cli.main import cli
+from cli.main import cli
 
 
 @pytest.fixture
@@ -78,10 +78,10 @@ class TestExitCodes:
 class TestTaskCommands:
     def test_task_status_from_checkpoint(self, runner: CliRunner, tmp_path: Path,
                                           monkeypatch: pytest.MonkeyPatch) -> None:
-        from kinetic.config import Settings
-        from kinetic.tasks.checkpoints import CheckpointStore, build_checkpoint
-        from kinetic.tasks.models import Plan, Task
-        from kinetic.tasks.states import TaskState
+        from config import Settings
+        from tasks.checkpoints import CheckpointStore, build_checkpoint
+        from tasks.models import Plan, Task
+        from tasks.states import TaskState
 
         ckpt_dir = tmp_path / "ckpts"
         monkeypatch.setenv("KINETIC_CHECKPOINT_DIR", str(ckpt_dir))
@@ -98,10 +98,10 @@ class TestTaskCommands:
 
     def test_task_inspect_from_checkpoint(self, runner: CliRunner, tmp_path: Path,
                                            monkeypatch: pytest.MonkeyPatch) -> None:
-        from kinetic.config import Settings
-        from kinetic.tasks.checkpoints import CheckpointStore, build_checkpoint
-        from kinetic.tasks.models import Plan, Task
-        from kinetic.tasks.states import TaskState
+        from config import Settings
+        from tasks.checkpoints import CheckpointStore, build_checkpoint
+        from tasks.models import Plan, Task
+        from tasks.states import TaskState
 
         ckpt_dir = tmp_path / "ckpts"
         monkeypatch.setenv("KINETIC_CHECKPOINT_DIR", str(ckpt_dir))
@@ -117,10 +117,10 @@ class TestTaskCommands:
 
     def test_task_cancel_from_checkpoint(self, runner: CliRunner, tmp_path: Path,
                                           monkeypatch: pytest.MonkeyPatch) -> None:
-        from kinetic.config import Settings
-        from kinetic.tasks.checkpoints import CheckpointStore, build_checkpoint
-        from kinetic.tasks.models import Plan, Task
-        from kinetic.tasks.states import TaskState
+        from config import Settings
+        from tasks.checkpoints import CheckpointStore, build_checkpoint
+        from tasks.models import Plan, Task
+        from tasks.states import TaskState
 
         ckpt_dir = tmp_path / "ckpts"
         monkeypatch.setenv("KINETIC_CHECKPOINT_DIR", str(ckpt_dir))

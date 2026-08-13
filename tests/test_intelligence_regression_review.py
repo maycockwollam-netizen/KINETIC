@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.environment import Environment
-from kinetic.environment.config import RUNTIME_LOCAL, EnvironmentConfig
-from kinetic.environment.network import NetworkPolicy
-from kinetic.events import EventBus
-from kinetic.intelligence.models import ChangeAnalysis
-from kinetic.intelligence.regression import RegressionChecker
-from kinetic.intelligence.review import FinalReviewer
-from kinetic.tasks.policies import VerificationOutcome
-from kinetic.tasks.verifier import VerificationResult, Verifier
+from environment import Environment
+from environment.config import RUNTIME_LOCAL, EnvironmentConfig
+from environment.network import NetworkPolicy
+from events import EventBus
+from intelligence.models import ChangeAnalysis
+from intelligence.regression import RegressionChecker
+from intelligence.review import FinalReviewer
+from tasks.policies import VerificationOutcome
+from tasks.verifier import VerificationResult, Verifier
 
 
 @pytest.fixture

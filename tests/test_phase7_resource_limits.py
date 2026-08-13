@@ -9,7 +9,7 @@ from __future__ import annotations
 import pydantic
 import pytest
 
-from kinetic.config import Settings
+from config import Settings
 
 
 class TestExtremeConfigValues:
@@ -46,9 +46,9 @@ class TestPlanBounds:
     """Plans must be bounded by max_steps and max_dependencies."""
 
     def test_oversized_plan_rejected(self) -> None:
-        from kinetic.errors import PlanError
-        from kinetic.tasks.models import Plan, PlanStep
-        from kinetic.tasks.planner import validate_plan
+        from errors import PlanError
+        from tasks.models import Plan, PlanStep
+        from tasks.planner import validate_plan
 
         steps = [PlanStep(step_id=f"s{i}", description="x") for i in range(20)]
         plan = Plan(plan_id="p", task_id="t", goal="g", steps=steps)
@@ -56,9 +56,9 @@ class TestPlanBounds:
             validate_plan(plan, max_steps=10, max_deps=8)
 
     def test_too_many_deps_rejected(self) -> None:
-        from kinetic.errors import PlanError
-        from kinetic.tasks.models import Plan, PlanStep
-        from kinetic.tasks.planner import validate_plan
+        from errors import PlanError
+        from tasks.models import Plan, PlanStep
+        from tasks.planner import validate_plan
 
         deps = [f"s{i}" for i in range(10)]
         step = PlanStep(step_id="s1", description="x", depends_on=deps)
@@ -67,9 +67,9 @@ class TestPlanBounds:
             validate_plan(plan, max_steps=12, max_deps=5)
 
     def test_cycle_detected(self) -> None:
-        from kinetic.errors import PlanError
-        from kinetic.tasks.models import Plan, PlanStep
-        from kinetic.tasks.planner import validate_plan
+        from errors import PlanError
+        from tasks.models import Plan, PlanStep
+        from tasks.planner import validate_plan
 
         s1 = PlanStep(step_id="s1", description="x", depends_on=["s2"])
         s2 = PlanStep(step_id="s2", description="x", depends_on=["s1"])
@@ -78,9 +78,9 @@ class TestPlanBounds:
             validate_plan(plan, max_steps=12, max_deps=8)
 
     def test_unknown_dependency_rejected(self) -> None:
-        from kinetic.errors import PlanError
-        from kinetic.tasks.models import Plan, PlanStep
-        from kinetic.tasks.planner import validate_plan
+        from errors import PlanError
+        from tasks.models import Plan, PlanStep
+        from tasks.planner import validate_plan
 
         step = PlanStep(step_id="s1", description="x", depends_on=["nonexistent"])
         plan = Plan(plan_id="p", task_id="t", goal="g", steps=[step])
@@ -92,7 +92,7 @@ class TestObservationBounds:
     """Observations must be bounded."""
 
     def test_stdout_truncated(self) -> None:
-        from kinetic.tasks.observer import Observer
+        from tasks.observer import Observer
 
         obs = Observer(max_stdout_chars=100, max_stderr_chars=100)
         result = obs.observe(
@@ -101,7 +101,7 @@ class TestObservationBounds:
         assert len(result.stdout_summary) <= 200  # bounded + suffix
 
     def test_stderr_truncated(self) -> None:
-        from kinetic.tasks.observer import Observer
+        from tasks.observer import Observer
 
         obs = Observer(max_stdout_chars=100, max_stderr_chars=50)
         result = obs.observe(
@@ -114,8 +114,8 @@ class TestCheckpointBounds:
     """Checkpoints must be bounded."""
 
     def test_observations_bounded_in_checkpoint(self) -> None:
-        from kinetic.tasks.checkpoints import build_checkpoint
-        from kinetic.tasks.models import Plan, Task
+        from tasks.checkpoints import build_checkpoint
+        from tasks.models import Plan, Task
 
         task = Task(id="t1", user_request="do", workspace="/ws")
         plan = Plan(plan_id="p", task_id="t1", goal="g", steps=[])
@@ -129,7 +129,7 @@ class TestEventPayloadBounds:
     """Event payloads must be bounded."""
 
     def test_large_payload_truncated(self) -> None:
-        from kinetic.events import EventBus, EventType
+        from events import EventBus, EventType
 
         bus = EventBus(max_payload_bytes=500)
         bus.emit(EventType.AGENT_MESSAGE, "s", blob="x" * 100_000)

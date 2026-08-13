@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.memory.embeddings import DeterministicEmbeddingProvider, cosine_similarity
-from kinetic.memory.metadata import DEFAULT_SECRET_DETECTOR, MemoryFilter
-from kinetic.memory.models import MemoryRecord, MemoryScope
-from kinetic.memory.store import SQLiteStore
+from memory.embeddings import DeterministicEmbeddingProvider, cosine_similarity
+from memory.metadata import DEFAULT_SECRET_DETECTOR, MemoryFilter
+from memory.models import MemoryRecord, MemoryScope
+from memory.store import SQLiteStore
 
 
 @pytest.fixture
@@ -131,7 +131,7 @@ class TestMemoryFailureClassification:
     """Memory failures must be classified explicitly, not silently corrupt tasks."""
 
     def test_memory_error_is_structured(self) -> None:
-        from kinetic.errors import MemoryError, MemorySecurityError
+        from errors import MemoryError, MemorySecurityError
 
         err = MemoryError("store failed")
         assert isinstance(err, Exception)

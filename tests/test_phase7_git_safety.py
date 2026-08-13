@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import GitError, PermissionDeniedError
-from kinetic.events import EventBus
-from kinetic.security import AuditLog, PermissionPolicy
-from kinetic.tools.git import GitTools
+from errors import GitError, PermissionDeniedError
+from events import EventBus
+from security import AuditLog, PermissionPolicy
+from tools.git import GitTools
 
 
 @pytest.fixture
@@ -89,8 +89,8 @@ class TestGitWritePermissions:
 
 class TestSymlinkSafety:
     def test_symlink_escape_in_resolve(self, tmp_path: Path) -> None:
-        from kinetic.errors import SecurityError
-        from kinetic.paths import safe_resolve
+        from errors import SecurityError
+        from paths import safe_resolve
 
         outside = tmp_path.parent / "outside"
         outside.mkdir(exist_ok=True)
@@ -131,7 +131,7 @@ class TestMissingGit:
 
 class TestWorkspaceDeletion:
     def test_workspace_cleanup_only_within(self, tmp_path: Path) -> None:
-        from kinetic.environment.workspace import Workspace
+        from environment.workspace import Workspace
 
         parent = tmp_path / "root"
         ws = Workspace.create(parent=parent, name="test-ws")

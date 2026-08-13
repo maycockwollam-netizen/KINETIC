@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kinetic.intelligence.diff import ChangeAnalyzer, GitToolsInspector
-from kinetic.intelligence.models import ChangeAnalysis
+from intelligence.diff import ChangeAnalyzer, GitToolsInspector
+from intelligence.models import ChangeAnalysis
 
 STATUS = """\
 ## main
@@ -127,8 +127,8 @@ class TestGracefulDegrade:
 class TestGitToolsInspectorProtocol:
     def test_git_tools_inspector_satisfies_protocol(self, tmp_path: Path) -> None:
         # GitToolsInspector is structural; verify it has the expected methods.
-        from kinetic.security import AuditLog, PermissionPolicy
-        from kinetic.tools.git import GitTools
+        from security import AuditLog, PermissionPolicy
+        from tools.git import GitTools
 
         git = GitTools(
             workspace=tmp_path, policy=PermissionPolicy(writable_roots=[tmp_path]),

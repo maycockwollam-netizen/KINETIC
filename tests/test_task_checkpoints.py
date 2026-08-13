@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import CheckpointError
-from kinetic.tasks.checkpoints import CheckpointStore, build_checkpoint, restore_checkpoint
-from kinetic.tasks.models import Plan, PlanStep, Task
-from kinetic.tasks.states import TaskState
+from errors import CheckpointError
+from tasks.checkpoints import CheckpointStore, build_checkpoint, restore_checkpoint
+from tasks.models import Plan, PlanStep, Task
+from tasks.states import TaskState
 
 
 @pytest.fixture

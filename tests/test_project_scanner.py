@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from kinetic.project import find_project_root, scan_project
+from project import find_project_root, scan_project
 
 
 def _write(root: Path, name: str, content: str = "") -> None:

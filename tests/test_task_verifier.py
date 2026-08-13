@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.environment import Environment
-from kinetic.environment.config import RUNTIME_LOCAL, EnvironmentConfig
-from kinetic.environment.network import NetworkPolicy
-from kinetic.project.models import ManifestFile, ProjectManifest
-from kinetic.tasks.policies import VerificationOutcome
-from kinetic.tasks.verifier import Verifier, command_for_manifest
+from environment import Environment
+from environment.config import RUNTIME_LOCAL, EnvironmentConfig
+from environment.network import NetworkPolicy
+from project.models import ManifestFile, ProjectManifest
+from tasks.policies import VerificationOutcome
+from tasks.verifier import Verifier, command_for_manifest
 
 
 def _manifest(**kw) -> ProjectManifest:
@@ -88,7 +88,7 @@ class TestVerifier:
     async def test_verification_goes_through_environment_permission(self, tmp_path: Path) -> None:
         # An environment whose ENVIRONMENT_EXEC is denied must raise / deny,
         # proving verification never bypasses the security boundary.
-        from kinetic.security import PermissionPolicy
+        from security import PermissionPolicy
 
         policy = PermissionPolicy(allow_environment_exec=False)
         cfg = EnvironmentConfig(runtime_type=RUNTIME_LOCAL, sandbox_mode=False, network=NetworkPolicy.ALLOW)
@@ -96,7 +96,7 @@ class TestVerifier:
         await env.provision()
         try:
             v = Verifier(environment=env, configured_command="true")
-            from kinetic.errors import PermissionDeniedError, VerificationError
+            from errors import PermissionDeniedError, VerificationError
 
             with pytest.raises((VerificationError, PermissionDeniedError)):
                 await v.verify()

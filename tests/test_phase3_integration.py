@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.agent.session import AgentSession, SessionConfig
-from kinetic.config import Settings
-from kinetic.environment import EnvironmentState, NetworkPolicy
-from kinetic.events import EventType
+from agent.session import AgentSession, SessionConfig
+from config import Settings
+from environment import EnvironmentState, NetworkPolicy
+from events import EventType
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -93,7 +93,7 @@ def test_session_policy_gates_environment_exec(tmp_path: Path, workspace: Path):
     )
     session = AgentSession(settings, cfg)
     # The session policy must deny ENVIRONMENT_EXEC.
-    from kinetic.security import ENVIRONMENT_EXEC
+    from security import ENVIRONMENT_EXEC
 
     d = session.policy.evaluate("run_command", ENVIRONMENT_EXEC, {"command": "ls"})
     assert not d.allowed
@@ -103,7 +103,7 @@ def test_session_policy_denies_environment_network_by_default(tmp_path: Path, wo
     settings = _settings(tmp_path)
     cfg = SessionConfig(workspace=workspace, prompt="x")
     session = AgentSession(settings, cfg)
-    from kinetic.security import ENVIRONMENT_NETWORK
+    from security import ENVIRONMENT_NETWORK
 
     d = session.policy.evaluate("set_net", ENVIRONMENT_NETWORK, {})
     assert not d.allowed
@@ -114,8 +114,8 @@ async def test_session_run_destroys_environment_on_provision_failure(
     tmp_path: Path, workspace: Path, monkeypatch
 ):
     """A provisioning failure must still tear the environment down (no leak)."""
-    from kinetic.environment import EnvironmentState
-    from kinetic.environment.local import LocalRuntime
+    from environment import EnvironmentState
+    from environment.local import LocalRuntime
 
     settings = _settings(tmp_path)
     cfg = SessionConfig(workspace=workspace, prompt="x", network_policy="allow")
@@ -137,7 +137,7 @@ async def test_session_run_destroys_environment_on_model_error(
     tmp_path: Path, workspace: Path, monkeypatch
 ):
     """A model/adapter error must still tear the environment down (no leak)."""
-    from kinetic.environment import EnvironmentState
+    from environment import EnvironmentState
 
     settings = _settings(tmp_path)
     cfg = SessionConfig(workspace=workspace, prompt="x", network_policy="allow")

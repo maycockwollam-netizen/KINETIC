@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.agent.session import AgentSession, SessionConfig
-from kinetic.config import Settings
-from kinetic.dependencies import detect_dependencies
-from kinetic.errors import PermissionDeniedError
-from kinetic.events import EventType
-from kinetic.project import scan_project
-from kinetic.security import AuditLog, PermissionPolicy
-from kinetic.tools.git import GitTools
+from agent.session import AgentSession, SessionConfig
+from config import Settings
+from dependencies import detect_dependencies
+from errors import PermissionDeniedError
+from events import EventType
+from project import scan_project
+from security import AuditLog, PermissionPolicy
+from tools.git import GitTools
 
 
 def _git(root: Path, *args: str) -> None:
@@ -48,7 +48,7 @@ def sample_repo(tmp_path: Path) -> Path:
 @pytest.mark.timeout(60)
 def test_phase2_integration(sample_repo: Path, settings: Settings):
     # 1. Create/open workspace = the sample repo.
-    from kinetic.environment import Workspace
+    from environment import Workspace
 
     ws = Workspace.open(sample_repo)
     assert ws.root == sample_repo.resolve()

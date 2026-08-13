@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.errors import PermissionDeniedError
-from kinetic.events import EventBus, EventType
-from kinetic.memory import (
+from errors import PermissionDeniedError
+from events import EventBus, EventType
+from memory import (
     DeterministicEmbeddingProvider,
     MemoryManager,
     MemoryScope,
@@ -17,8 +17,8 @@ from kinetic.memory import (
     Retriever,
     SQLiteStore,
 )
-from kinetic.security import AuditLog, PermissionPolicy
-from kinetic.tools.memory import memory_tools
+from security import AuditLog, PermissionPolicy
+from tools.memory import memory_tools
 
 
 @pytest.fixture

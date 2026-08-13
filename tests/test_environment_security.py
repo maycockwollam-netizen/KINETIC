@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.environment import (
+from environment import (
     Environment,
     EnvironmentConfig,
     EnvironmentState,
@@ -20,9 +20,9 @@ from kinetic.environment import (
     ProcessSpec,
     ResourceLimits,
 )
-from kinetic.errors import PermissionDeniedError, SandboxError
-from kinetic.events import EventBus, EventType
-from kinetic.security import (
+from errors import PermissionDeniedError, SandboxError
+from events import EventBus, EventType
+from security import (
     ENVIRONMENT_ADMIN,
     ENVIRONMENT_CREATE,
     ENVIRONMENT_EXEC,
@@ -174,7 +174,7 @@ def test_environment_capability_flags_compose():
 
 async def test_docker_runtime_unavailable_does_not_fallback(tmp_path: Path, monkeypatch):
     """If docker is requested but unavailable, we must NOT run on host."""
-    from kinetic.environment.docker import DockerRuntime
+    from environment.docker import DockerRuntime
 
     async def fake_probe():
         return False
@@ -182,7 +182,7 @@ async def test_docker_runtime_unavailable_does_not_fallback(tmp_path: Path, monk
     monkeypatch.setattr(DockerRuntime, "probe", staticmethod(fake_probe))
     cfg = EnvironmentConfig.docker_defaults()
     env = Environment.create(tmp_path / "ws", cfg)
-    from kinetic.errors import RuntimeUnavailableError
+    from errors import RuntimeUnavailableError
 
     with pytest.raises(RuntimeUnavailableError, match="refusing to fall back"):
         await env.provision()
@@ -195,7 +195,7 @@ async def test_docker_runtime_unavailable_does_not_fallback(tmp_path: Path, monk
 async def test_environment_exec_cwd_traversal_blocked(tmp_path: Path):
     env = Environment.create(tmp_path / "ws", _local())
     await env.provision()
-    from kinetic.errors import SecurityError
+    from errors import SecurityError
 
     with pytest.raises(SecurityError, match="traversal"):
         await env.exec(ProcessSpec(command="ls", cwd="../../etc", timeout=5))

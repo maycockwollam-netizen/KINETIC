@@ -12,8 +12,8 @@ from pathlib import Path
 import pydantic
 import pytest
 
-from kinetic.config import Settings, load_settings
-from kinetic.errors import ConfigError
+from config import Settings, load_settings
+from errors import ConfigError
 
 
 class TestConfigBounds:

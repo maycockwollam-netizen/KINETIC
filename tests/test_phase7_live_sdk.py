@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def live_settings(tmp_path: Path):
-    from kinetic.config import Settings
+    from config import Settings
 
     return Settings(
         workspace_root=tmp_path / "ws",
@@ -44,13 +44,13 @@ class TestLiveSDKIntegration:
     """Live integration tests — only run with a real API key."""
 
     async def test_sdk_initializes(self, live_settings) -> None:
-        from kinetic.agent.adapter import _IMPORT_ERROR
+        from agent.adapter import _IMPORT_ERROR
 
         # The SDK must be importable.
         assert _IMPORT_ERROR is None, "claude-agent-sdk must be installed for live tests"
 
     async def test_session_builds(self, live_settings, tmp_path: Path) -> None:
-        from kinetic.agent.session import AgentSession, SessionConfig
+        from agent.session import AgentSession, SessionConfig
 
         ws = tmp_path / "live_ws"
         ws.mkdir()
@@ -62,7 +62,7 @@ class TestLiveSDKIntegration:
         assert "run_command" in session.registry.names()
 
     async def test_environment_provisions(self, live_settings, tmp_path: Path) -> None:
-        from kinetic.agent.session import AgentSession, SessionConfig
+        from agent.session import AgentSession, SessionConfig
 
         ws = tmp_path / "live_env"
         ws.mkdir()
@@ -77,7 +77,7 @@ class TestLiveSDKIntegration:
         assert not session.environment.is_running()
 
     async def test_no_api_key_in_events(self, live_settings, tmp_path: Path) -> None:
-        from kinetic.agent.session import AgentSession, SessionConfig
+        from agent.session import AgentSession, SessionConfig
 
         ws = tmp_path / "live_secret"
         ws.mkdir()

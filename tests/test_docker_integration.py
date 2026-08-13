@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.environment import (
+from environment import (
     Environment,
     EnvironmentConfig,
     EnvironmentState,
@@ -21,8 +21,8 @@ from kinetic.environment import (
     ProcessSpec,
     ResourceLimits,
 )
-from kinetic.environment.docker import DockerRuntime
-from kinetic.errors import SandboxError
+from environment.docker import DockerRuntime
+from errors import SandboxError
 
 pytestmark = pytest.mark.timeout(120)
 
@@ -118,7 +118,7 @@ async def test_docker_timeout(tmp_path: Path, require_docker):
     await env.provision()
     res = await env.exec(ProcessSpec(command="python3 -c 'import time; time.sleep(30)'", timeout=3))
     assert res.timed_out
-    from kinetic.environment.process import ProcessState
+    from environment.process import ProcessState
 
     assert res.state is ProcessState.TIMED_OUT
     await env.destroy()
@@ -140,7 +140,7 @@ async def test_docker_resource_limits_enforced(tmp_path: Path, require_docker):
 
 
 async def test_docker_cancellation(tmp_path: Path, require_docker):
-    from kinetic.tools.terminal import CancellationToken
+    from tools.terminal import CancellationToken
 
     cancel = CancellationToken()
     env = Environment.create(tmp_path / "ws", _docker_cfg(), session_id="d7")
@@ -159,7 +159,7 @@ async def test_docker_cancellation(tmp_path: Path, require_docker):
     )
     # Either cancelled or timed out — must NOT have completed the full sleep.
     assert res.exit_code != 0 or res.state is not __import__(
-        "kinetic.environment.process", fromlist=["ProcessState"]
+        "environment.process", fromlist=["ProcessState"]
     ).ProcessState.COMPLETED
     await env.destroy()
 
@@ -171,8 +171,8 @@ async def test_docker_cleanup_removes_container(tmp_path: Path, require_docker):
     assert container_id is not None
     await env.destroy()
     # The container must be gone.
-    from kinetic.environment.docker import _docker_cmd_prefix
-    from kinetic.tools.terminal import run_command
+    from environment.docker import _docker_cmd_prefix
+    from tools.terminal import run_command
 
     res = await run_command(
         f"{_docker_cmd_prefix()} inspect --format '{{{{.State.Status}}}}' {container_id}",
@@ -203,8 +203,8 @@ async def test_docker_container_has_kinetic_labels(tmp_path: Path, require_docke
     """Created containers carry KINETIC ownership labels for leak tracking."""
     import json
 
-    from kinetic.environment.docker import _docker_cmd_prefix
-    from kinetic.tools.terminal import run_command
+    from environment.docker import _docker_cmd_prefix
+    from tools.terminal import run_command
 
     env = Environment.create(tmp_path / "ws", _docker_cfg(), session_id="d11")
     await env.provision()
@@ -225,10 +225,10 @@ async def test_docker_destroy_surfaces_cleanup_failure(tmp_path: Path, require_d
     still reaching the ``DESTROYED`` terminal state. We simulate the failure
     with a docker runtime whose ``destroy`` raises.
     """
-    from kinetic.environment.docker import DockerRuntime
-    from kinetic.errors import SandboxError
-    from kinetic.events import EventBus, EventType
-    from kinetic.security import AuditLog
+    from environment.docker import DockerRuntime
+    from errors import SandboxError
+    from events import EventBus, EventType
+    from security import AuditLog
 
     bus = EventBus()
     audit = AuditLog(tmp_path / "d12.log")

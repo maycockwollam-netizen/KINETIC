@@ -13,17 +13,17 @@ from typing import Any
 
 import pytest
 
-from kinetic.agent.session import AgentSession, SessionConfig
-from kinetic.config import Settings
-from kinetic.environment import Environment
-from kinetic.environment.config import RUNTIME_LOCAL, EnvironmentConfig
-from kinetic.environment.network import NetworkPolicy
-from kinetic.errors import PermissionDeniedError
-from kinetic.project.scanner import scan_project
-from kinetic.security import PermissionPolicy
-from kinetic.tasks.models import Plan, PlanStep
-from kinetic.tasks.orchestrator import Orchestrator
-from kinetic.tasks.verifier import Verifier
+from agent.session import AgentSession, SessionConfig
+from config import Settings
+from environment import Environment
+from environment.config import RUNTIME_LOCAL, EnvironmentConfig
+from environment.network import NetworkPolicy
+from errors import PermissionDeniedError
+from project.scanner import scan_project
+from security import PermissionPolicy
+from tasks.models import Plan, PlanStep
+from tasks.orchestrator import Orchestrator
+from tasks.verifier import Verifier
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -92,7 +92,7 @@ class TestOrchestrationSecurityBoundary:
         """
         import ast
 
-        import kinetic.tasks.executor as exec_mod
+        import tasks.executor as exec_mod
 
         src = Path(exec_mod.__file__).read_text()
         tree = ast.parse(src)
@@ -109,7 +109,7 @@ class TestOrchestrationSecurityBoundary:
 
     async def test_no_second_tool_registry_or_permission_system(self) -> None:
         """The tasks package must reuse — not duplicate — the existing registry/policy."""
-        import kinetic.tasks as tasks_pkg
+        import tasks as tasks_pkg
 
         src_dir = Path(tasks_pkg.__file__).parent
         for py in src_dir.glob("*.py"):

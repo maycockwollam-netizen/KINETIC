@@ -13,13 +13,13 @@ from typing import Any
 
 import pytest
 
-from kinetic.agent.session import AgentSession, SessionConfig
-from kinetic.config import Settings
-from kinetic.environment import EnvironmentState
-from kinetic.project.scanner import scan_project
-from kinetic.tasks.models import Plan, PlanStep
-from kinetic.tasks.orchestrator import Orchestrator
-from kinetic.tasks.states import TaskState
+from agent.session import AgentSession, SessionConfig
+from config import Settings
+from environment import EnvironmentState
+from project.scanner import scan_project
+from tasks.models import Plan, PlanStep
+from tasks.orchestrator import Orchestrator
+from tasks.states import TaskState
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -156,7 +156,7 @@ class TestContextIntegration:
         cfg = SessionConfig(workspace=workspace, prompt="x", network_policy="allow", allow_memory_write=True)
         session = AgentSession(settings, cfg)
         # Seed a project memory.
-        from kinetic.memory.models import MemoryScope
+        from memory.models import MemoryScope
 
         await session.memory.create(
             content="project uses uv run pytest for tests",

@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.agent.adapter import AgentAdapter
-from kinetic.events import EventBus
-from kinetic.security import AuditLog, PermissionPolicy
-from kinetic.tools.base import ToolRegistry
-from kinetic.tools.filesystem import filesystem_tools
-from kinetic.tools.terminal import terminal_tool
+from agent.adapter import AgentAdapter
+from events import EventBus
+from security import AuditLog, PermissionPolicy
+from tools.base import ToolRegistry
+from tools.filesystem import filesystem_tools
+from tools.terminal import terminal_tool
 
 
 def _registry(workspace: Path) -> ToolRegistry:
@@ -28,7 +28,7 @@ def _registry(workspace: Path) -> ToolRegistry:
 
 def test_adapter_builds_options_with_mcp_server(workspace: Path, settings):
     # Patch the SDK symbols to fakes so _build_options doesn't need a key.
-    import kinetic.agent.adapter as mod
+    import agent.adapter as mod
 
     calls = {}
 

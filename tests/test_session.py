@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kinetic.agent.session import AgentSession, SessionConfig, default_tools_for
+from agent.session import AgentSession, SessionConfig, default_tools_for
 
 
 def test_session_builds_registry(workspace: Path, settings):
@@ -68,7 +68,7 @@ def test_workspace_in_writable_roots(workspace: Path, settings):
     cfg = SessionConfig(workspace=workspace, prompt="hi")
     session = AgentSession(settings, cfg)
     # write_file within workspace must be allowed by policy.
-    from kinetic.security.policy import FILE_WRITE
+    from security.policy import FILE_WRITE
 
     decision = session.policy.evaluate("write_file", FILE_WRITE, {"path": str(workspace / "x.txt")})
     assert decision.allowed

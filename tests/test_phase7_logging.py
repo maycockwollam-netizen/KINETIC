@@ -12,7 +12,7 @@ import logging
 
 import pytest
 
-from kinetic.observability.logging import (
+from observability.logging import (
     bind_context,
     clear_context,
     configure,

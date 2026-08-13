@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from kinetic.lifecycle import ShutdownCoordinator, install_signal_handlers
+from lifecycle import ShutdownCoordinator, install_signal_handlers
 
 
 class TestShutdownCoordinator:

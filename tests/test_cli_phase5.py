@@ -6,16 +6,16 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from kinetic.cli.main import cli
-from kinetic.config import Settings
-from kinetic.tasks.checkpoints import CheckpointStore, build_checkpoint
-from kinetic.tasks.models import Plan, PlanStep, Task
-from kinetic.tasks.states import TaskState
+from cli.main import cli
+from config import Settings
+from tasks.checkpoints import CheckpointStore, build_checkpoint
+from tasks.models import Plan, PlanStep, Task
+from tasks.states import TaskState
 
 
 def _settings_with_dir(tmp_path: Path) -> None:
     """Point the global Settings at a temp checkpoint dir for these tests."""
-    import kinetic.cli.main as cli_mod
+    import cli.main as cli_mod
 
     orig = cli_mod.Settings
     cli_mod.Settings = lambda *a, **k: Settings(  # type: ignore[assignment]
@@ -28,7 +28,7 @@ def _settings_with_dir(tmp_path: Path) -> None:
 
 def test_task_status_missing_checkpoint(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "kinetic.config.Settings",
+        "config.Settings",
         lambda *a, **k: Settings(checkpoint_dir=tmp_path / "ckpt", audit_log_path=tmp_path / "a.log"),
     )
     runner = CliRunner()
@@ -40,7 +40,7 @@ def test_task_status_missing_checkpoint(tmp_path: Path, monkeypatch) -> None:
 def test_task_status_reports_state(tmp_path: Path, monkeypatch) -> None:
     ckpt_dir = tmp_path / "ckpt"
     monkeypatch.setattr(
-        "kinetic.config.Settings",
+        "config.Settings",
         lambda *a, **k: Settings(checkpoint_dir=ckpt_dir, audit_log_path=tmp_path / "a.log"),
     )
     Settings(checkpoint_dir=ckpt_dir, audit_log_path=tmp_path / "a.log").ensure_directories()
@@ -62,7 +62,7 @@ def test_task_status_reports_state(tmp_path: Path, monkeypatch) -> None:
 def test_task_cancel_marks_checkpoint(tmp_path: Path, monkeypatch) -> None:
     ckpt_dir = tmp_path / "ckpt"
     monkeypatch.setattr(
-        "kinetic.config.Settings",
+        "config.Settings",
         lambda *a, **k: Settings(checkpoint_dir=ckpt_dir, audit_log_path=tmp_path / "a.log"),
     )
     Settings(checkpoint_dir=ckpt_dir, audit_log_path=tmp_path / "a.log").ensure_directories()
@@ -75,7 +75,7 @@ def test_task_cancel_marks_checkpoint(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0
     assert "cancelled" in result.output
     # Re-load and verify cancelled.
-    from kinetic.tasks.checkpoints import restore_checkpoint
+    from tasks.checkpoints import restore_checkpoint
 
     t2, _, _ = restore_checkpoint(store.load("t1"))
     assert t2.cancelled is True
@@ -84,7 +84,7 @@ def test_task_cancel_marks_checkpoint(tmp_path: Path, monkeypatch) -> None:
 def test_task_cancel_on_terminal_is_noop(tmp_path: Path, monkeypatch) -> None:
     ckpt_dir = tmp_path / "ckpt"
     monkeypatch.setattr(
-        "kinetic.config.Settings",
+        "config.Settings",
         lambda *a, **k: Settings(checkpoint_dir=ckpt_dir, audit_log_path=tmp_path / "a.log"),
     )
     Settings(checkpoint_dir=ckpt_dir, audit_log_path=tmp_path / "a.log").ensure_directories()

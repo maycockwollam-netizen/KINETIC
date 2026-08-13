@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from kinetic.errors import SecurityError, ToolError
-from kinetic.tools.filesystem import FilesystemTools, filesystem_tools
-from kinetic.tools.terminal import TerminalTool, run_command
+from errors import SecurityError, ToolError
+from tools.filesystem import FilesystemTools, filesystem_tools
+from tools.terminal import TerminalTool, run_command
 
 # --- filesystem ---------------------------------------------------------------
 

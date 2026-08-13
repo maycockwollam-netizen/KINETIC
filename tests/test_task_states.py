@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from kinetic.errors import TaskStateError
-from kinetic.tasks.states import (
+from errors import TaskStateError
+from tasks.states import (
     TERMINAL_STATES,
     TaskState,
     is_terminal,
@@ -63,7 +63,7 @@ class TestTaskStateMachine:
 
 class TestTaskModel:
     def test_task_summary_excludes_private_reasoning(self) -> None:
-        from kinetic.tasks.models import Task
+        from tasks.models import Task
 
         t = Task(id="t1", user_request="do X", workspace="/ws")
         s = t.summary()
@@ -72,13 +72,13 @@ class TestTaskModel:
         assert s["cancelled"] is False
 
     def test_empty_request_rejected(self) -> None:
-        from kinetic.tasks.models import Task
+        from tasks.models import Task
 
         with pytest.raises(ValueError):
             Task(id="t1", user_request="   ", workspace="/ws")
 
     def test_touch_updates_timestamp(self) -> None:
-        from kinetic.tasks.models import Task
+        from tasks.models import Task
 
         t = Task(id="t1", user_request="x", workspace="/ws")
         before = t.updated_at
@@ -86,13 +86,13 @@ class TestTaskModel:
         assert t.updated_at >= before
 
     def test_step_dedupes_dependencies(self) -> None:
-        from kinetic.tasks.models import PlanStep
+        from tasks.models import PlanStep
 
         s = PlanStep(step_id="s1", depends_on=["s2", "s2", "s3"])
         assert s.depends_on == ["s2", "s3"]
 
     def test_step_empty_id_rejected(self) -> None:
-        from kinetic.tasks.models import PlanStep
+        from tasks.models import PlanStep
 
         with pytest.raises(ValueError):
             PlanStep(step_id="  ")

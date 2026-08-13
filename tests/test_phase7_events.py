@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from kinetic.events import EventBus, EventType
+from events import EventBus, EventType
 
 
 class TestBoundedQueues:

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from kinetic.events import EventBus
-from kinetic.intelligence.analyzer import FailureAnalyzer, failure_signature
-from kinetic.intelligence.models import RepairAttempt, RepairState
-from kinetic.intelligence.stuck import StuckDetector
+from events import EventBus
+from intelligence.analyzer import FailureAnalyzer, failure_signature
+from intelligence.models import RepairAttempt, RepairState
+from intelligence.stuck import StuckDetector
 
 
 def _analysis(command: str = "pytest", exit_code: int = 1, stdout: str = "FAILED tests/x.py::test_a\n1 failed"):

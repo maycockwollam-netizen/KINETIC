@@ -6,7 +6,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from kinetic.cli.main import cli
+from cli.main import cli
 
 
 def test_cli_dry_run(workspace: Path):

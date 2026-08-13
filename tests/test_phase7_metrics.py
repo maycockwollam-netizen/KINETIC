@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from kinetic.observability.metrics import (
+from observability.metrics import (
     METRIC_TASKS_COMPLETED,
     METRIC_TASKS_FAILED,
     MetricsCollector,
@@ -108,9 +108,9 @@ class TestWiring:
     """Verify metrics are recorded by the wired-in components."""
 
     def test_task_manager_records_metrics(self) -> None:
-        from kinetic.events import EventBus
-        from kinetic.tasks.manager import TaskManager
-        from kinetic.tasks.states import TaskState
+        from events import EventBus
+        from tasks.manager import TaskManager
+        from tasks.states import TaskState
 
         m = MetricsCollector()
         bus = EventBus()
@@ -128,10 +128,10 @@ class TestWiring:
         assert snap["counters"].get("tasks.completed") == 1
 
     def test_task_failed_metric(self) -> None:
-        from kinetic.events import EventBus
-        from kinetic.tasks.manager import TaskManager
-        from kinetic.tasks.models import TaskFailure
-        from kinetic.tasks.states import TaskState
+        from events import EventBus
+        from tasks.manager import TaskManager
+        from tasks.models import TaskFailure
+        from tasks.states import TaskState
 
         m = MetricsCollector()
         bus = EventBus()
@@ -143,8 +143,8 @@ class TestWiring:
         assert snap["counters"].get("tasks.failed") == 1
 
     def test_environment_metrics(self) -> None:
-        from kinetic.environment import Environment
-        from kinetic.environment.config import EnvironmentConfig
+        from environment import Environment
+        from environment.config import EnvironmentConfig
 
         m = MetricsCollector()
         cfg = EnvironmentConfig(runtime_type="local", sandbox_mode=False)

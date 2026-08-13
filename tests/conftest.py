@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.config import Settings
+from config import Settings
 
 # Docker in this sandbox is root-owned, so docker invocations need sudo. This
 # is an explicit, environment-controlled setting (see docker._docker_cmd_prefix)

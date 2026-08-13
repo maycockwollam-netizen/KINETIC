@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from kinetic.errors import PlanError
-from kinetic.tasks.models import Plan, PlanStep, StepStatus
-from kinetic.tasks.planner import (
+from errors import PlanError
+from tasks.models import Plan, PlanStep, StepStatus
+from tasks.planner import (
     invalidate_remaining_steps,
     next_executable_step,
     parse_model_plan,

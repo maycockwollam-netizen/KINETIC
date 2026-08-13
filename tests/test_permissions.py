@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from kinetic.errors import PermissionDeniedError
-from kinetic.security import Capability, PermissionPolicy
-from kinetic.security.policy import FILE_WRITE, NETWORK, READ_ONLY, ToolPermission
+from errors import PermissionDeniedError
+from security import Capability, PermissionPolicy
+from security.policy import FILE_WRITE, NETWORK, READ_ONLY, ToolPermission
 
 
 def test_read_only_allowed():
@@ -68,14 +68,14 @@ def test_capability_flags_compose():
 
 
 def test_memory_read_allowed_by_default():
-    from kinetic.security import MEMORY_READ
+    from security import MEMORY_READ
 
     policy = PermissionPolicy()
     assert policy.evaluate("memory_search", MEMORY_READ, {"query": "x"}).allowed
 
 
 def test_memory_write_denied_by_default():
-    from kinetic.security import MEMORY_WRITE
+    from security import MEMORY_WRITE
 
     policy = PermissionPolicy()
     d = policy.evaluate("memory_create", MEMORY_WRITE, {"content": "x"})
@@ -84,7 +84,7 @@ def test_memory_write_denied_by_default():
 
 
 def test_memory_delete_denied_by_default():
-    from kinetic.security import MEMORY_DELETE
+    from security import MEMORY_DELETE
 
     policy = PermissionPolicy()
     d = policy.evaluate("memory_delete", MEMORY_DELETE, {"id": "x"})
@@ -92,7 +92,7 @@ def test_memory_delete_denied_by_default():
 
 
 def test_memory_write_allowed_when_enabled():
-    from kinetic.security import MEMORY_WRITE
+    from security import MEMORY_WRITE
 
     policy = PermissionPolicy(allow_memory_write=True)
     assert policy.evaluate("memory_create", MEMORY_WRITE, {"content": "x"}).allowed

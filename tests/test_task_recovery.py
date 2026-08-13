@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from kinetic.events import EventBus
-from kinetic.security import AuditLog
-from kinetic.tasks.observer import Observation
-from kinetic.tasks.policies import (
+from events import EventBus
+from security import AuditLog
+from tasks.observer import Observation
+from tasks.policies import (
     FailureClass,
     RecoveryPolicy,
     RetryLimits,
     classify_failure,
 )
-from kinetic.tasks.recovery import RecoveryCoordinator, failure_context_prompt
+from tasks.recovery import RecoveryCoordinator, failure_context_prompt
 
 
 class TestFailureClassification:

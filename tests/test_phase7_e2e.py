@@ -38,19 +38,19 @@ from typing import Any
 
 import pytest
 
-from kinetic.config import Settings
-from kinetic.events import EventBus, EventType
-from kinetic.observability.metrics import MetricsCollector
-from kinetic.security import AuditLog, PermissionPolicy
-from kinetic.tasks.executor import ExecutionController
-from kinetic.tasks.manager import TaskManager
-from kinetic.tasks.models import Plan, PlanStep, Task
-from kinetic.tasks.observer import Observer
-from kinetic.tasks.policies import RecoveryPolicy, RetryLimits, VerificationOutcome
-from kinetic.tasks.recovery import RecoveryCoordinator
-from kinetic.tasks.states import TaskState
-from kinetic.tasks.verifier import VerificationResult, Verifier
-from kinetic.tools.git import GitTools
+from config import Settings
+from events import EventBus, EventType
+from observability.metrics import MetricsCollector
+from security import AuditLog, PermissionPolicy
+from tasks.executor import ExecutionController
+from tasks.manager import TaskManager
+from tasks.models import Plan, PlanStep, Task
+from tasks.observer import Observer
+from tasks.policies import RecoveryPolicy, RetryLimits, VerificationOutcome
+from tasks.recovery import RecoveryCoordinator
+from tasks.states import TaskState
+from tasks.verifier import VerificationResult, Verifier
+from tools.git import GitTools
 
 # --- fakes ------------------------------------------------------------------
 
@@ -137,7 +137,7 @@ class TestEndToEndFake:
         # 1. Workspace exists (fixture).
         # 2. Project detect (minimal).
         # 3. Create task via manager.
-        from kinetic.tasks.checkpoints import CheckpointStore
+        from tasks.checkpoints import CheckpointStore
 
         store = CheckpointStore(settings.checkpoint_dir)
         manager = TaskManager(events=events, audit=audit, session_id="e2e",
@@ -206,10 +206,10 @@ class TestEndToEndFake:
         assert (tmp_path / "ckpts" / "e2e-task.json").exists()
 
     async def test_failure_then_repair_then_success(self, e2e_workspace: Path, tmp_path: Path) -> None:
-        from kinetic.intelligence.analyzer import FailureAnalyzer
-        from kinetic.intelligence.repair import RepairContextBuilder, RepairCoordinator
-        from kinetic.intelligence.review import FinalReviewer
-        from kinetic.intelligence.stuck import StuckDetector
+        from intelligence.analyzer import FailureAnalyzer
+        from intelligence.repair import RepairContextBuilder, RepairCoordinator
+        from intelligence.review import FinalReviewer
+        from intelligence.stuck import StuckDetector
 
         settings = Settings(
             workspace_root=tmp_path / "ws_root",
@@ -247,7 +247,7 @@ class TestEndToEndFake:
             policy=RecoveryPolicy(RetryLimits.from_settings(settings)),
             events=events, audit=audit, session_id="e2e2",
         )
-        from kinetic.tasks.checkpoints import CheckpointStore
+        from tasks.checkpoints import CheckpointStore
 
         store = CheckpointStore(settings.checkpoint_dir)
 
@@ -271,8 +271,8 @@ class TestEndToEndFake:
 
         # Use a change analyzer that reports non-empty changes (the workspace
         # was modified by the step runner).
-        from kinetic.intelligence.diff import ChangeAnalyzer, GitToolsInspector
-        from kinetic.tools.git import GitTools
+        from intelligence.diff import ChangeAnalyzer, GitToolsInspector
+        from tools.git import GitTools
 
         git = GitTools(
             workspace=e2e_workspace, policy=PermissionPolicy(
@@ -341,7 +341,7 @@ class TestEndToEndFake:
             policy=RecoveryPolicy(RetryLimits.from_settings(settings)),
             events=events, audit=audit, session_id="secret-test",
         )
-        from kinetic.tasks.checkpoints import CheckpointStore
+        from tasks.checkpoints import CheckpointStore
 
         store = CheckpointStore(settings.checkpoint_dir)
 

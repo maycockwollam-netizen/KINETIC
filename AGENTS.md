@@ -127,7 +127,7 @@ daemon available (skipped otherwise). Ruff clean. Commit d93323c.
 ## Phase 4 scope (DONE)
 Memory & Context Engine. Selective hybrid-retrieval memory system — NOT a raw
 conversation dump. Only validated facts become persistent memory.
-- `kinetic/memory/`: models (MemoryRecord, MemoryScope EPHEMERAL/TASK/
+- `memory/`: models (MemoryRecord, MemoryScope EPHEMERAL/TASK/
   PROJECT/AGENT, compute_content_hash), embeddings (EmbeddingProvider ABC +
   DeterministicEmbeddingProvider — hashing-trick, local, no network/API key),
   metadata (MemoryFilter with project isolation + SecretDetector), store
@@ -141,7 +141,7 @@ conversation dump. Only validated facts become persistent memory.
   delete/retrieve/search/invalidate/scope/consolidate; secret-filtered;
   dedup via content_hash; invalidation-preferred over delete; failure-safe),
   providers/ (extension point).
-- `kinetic/context/`: ContextBudget (max memory items/chars/project
+- `context/`: ContextBudget (max memory items/chars/project
   metadata/recent events/task history), ContextEngine (assembles bounded
   package: task + relevant memories + project metadata + workspace state +
   recent events + task history; ranks/trims to budget; records omissions;
@@ -191,7 +191,7 @@ The Claude Agent SDK remains responsible for model interaction; KINETIC owns
 task lifecycle, planning state, execution state, observation, verification,
 bounded recovery, checkpoints. NO second agent loop / ToolRegistry /
 permission system / direct subprocess outside Environment.
-- `kinetic/tasks/`: states (TaskState machine: CREATED→CONTEXT_READY→
+- `tasks/`: states (TaskState machine: CREATED→CONTEXT_READY→
   PLANNING→PLAN_READY→EXECUTING→VERIFYING→COMPLETED/FAILED/CANCELLED +
   RECOVERING; invalid transitions raise TaskStateError), models (Task/Plan/
   PlanStep/StepStatus/TaskFailure — small, no raw model output), manager
@@ -274,7 +274,7 @@ better at completing real coding tasks *after* the Phase 5 orchestration layer
 has planned and executed work. Flow: Task → Plan → Execute → Observe → Verify →
 Failure analysis → Locate cause → Repair → Retest → Regression verification →
 Diff/quality review → Complete OR bounded failure.
-- `kinetic/intelligence/` package:
+- `intelligence/` package:
   - `models.py`: FailureAnalysis (bounded+secret-masked), TestFailureInfo,
     ChangeRecord, ChangeAnalysis, RepairAttempt, RepairState, StuckSignal,
     RegressionResult, ReviewCheck, ReviewResult.
@@ -346,8 +346,8 @@ Diff/quality review → Complete OR bounded failure.
   recorded but the decisive signal is after_failed.
 - Circular import: executor.py imports intelligence modules under TYPE_CHECKING
   only (string annotations) + lazy import of ChangeAnalysis inside _final_review.
-  intelligence.models imports kinetic.tasks.policies (not the tasks package), so
-  importing kinetic.intelligence does NOT trigger kinetic.tasks.__init__.
+  intelligence.models imports tasks.policies (not the tasks package), so
+  importing intelligence does NOT trigger tasks.__init__.
 - frozen TestFailureInfo file/line set via object.__setattr__ in npm/go parsers
   (attaching FAIL-file/package to already-created failure records).
 - Parser line extraction: pytest assertion location is on a SEPARATE line
@@ -392,7 +392,10 @@ Verified & fixed only security/correctness/reliability/integration issues:
 195 tests pass (175 prior + 10 docker + 10 new hardening). Ruff clean.
 
 ## Conventions
-- Package import root: `kinetic`. Source under `kinetic/`.
+- Package import root: repository root (top-level packages). Source under the
+  root-level domain directories (`agent/`, `cli/`, `config/`, ...). The former
+  `kinetic/` namespace was flattened in Phase 7.2 — imports are now
+  `from agent import ...`, `from tasks import ...`, etc.
 - Use `pydantic` v2 for structured data/config. Use `anyio` for async (SDK uses anyio).
 - Tools expose permission metadata; the registry collects them; agent gate checks via security policy.
 - Run tests with: `uv run pytest` (asyncio_mode=auto).
@@ -403,7 +406,7 @@ The final core-hardening phase. NOT a feature-expansion phase. Makes KINETIC
 operationally reliable, observable, configurable, testable, and ready for
 real-world use. All existing architecture and security boundaries preserved.
 
-### Configuration hardening (`kinetic/config/settings.py`)
+### Configuration hardening (`config/settings.py`)
 - `Settings` is now a `pydantic_settings.BaseSettings` with `env_prefix="KINETIC_"`
   so environment variables override defaults (e.g. `KINETIC_MAX_TURNS=10`).
 - `Settings.from_file(path)` + `load_settings(config_file)` layer env > file >
@@ -414,7 +417,7 @@ real-world use. All existing architecture and security boundaries preserved.
   runtime_type, permission_mode). Invalid values fail EARLY at construction.
 - Tests: `tests/test_phase7_config.py` (precedence + invalid config).
 
-### Structured logging (`kinetic/observability/logging.py`)
+### Structured logging (`observability/logging.py`)
 - Centralized JSON structured logging: `configure()`, `get_logger()`,
   `bind_context()` (session/task/workspace/environment correlation IDs).
 - `_SecretRedactingJsonFormatter` masks credential-like values in messages +
@@ -423,7 +426,7 @@ real-world use. All existing architecture and security boundaries preserved.
   accountability. Audit info is never duplicated into normal logs.
 - Tests: `tests/test_phase7_logging.py` (secret fixtures never appear).
 
-### Metrics (`kinetic/observability/metrics.py`)
+### Metrics (`observability/metrics.py`)
 - `MetricsCollector` with Counters, Gauges, Timers — bounded (max_metrics cap
   drops new names; timer samples bounded). Thread-safe. Snapshotable.
 - Standard metric names: tasks started/completed/failed/cancelled, task
@@ -434,7 +437,7 @@ real-world use. All existing architecture and security boundaries preserved.
   AgentSession + Orchestrator propagate the collector.
 - Tests: `tests/test_phase7_metrics.py`.
 
-### EventBus hardening (`kinetic/events/bus.py`)
+### EventBus hardening (`events/bus.py`)
 - Bounded subscriber queues (maxsize); slow consumers drop oldest (publisher
   never blocks). Subscriber failure (closed loop) → subscriber dropped, never
   crashes producer.
@@ -443,7 +446,7 @@ real-world use. All existing architecture and security boundaries preserved.
 - Tests: `tests/test_phase7_events.py` (stress, slow/cancelled/failed consumer,
   concurrent publishers, payload safety).
 
-### Graceful shutdown (`kinetic/lifecycle.py`)
+### Graceful shutdown (`lifecycle.py`)
 - `ShutdownCoordinator`: registers named cleanup callbacks (async/sync), runs
   them LIFO within a bounded timeout. Timed-out callbacks abandoned; failed
   callbacks recorded but don't stop others. Cancellation distinct from failure.
@@ -451,7 +454,7 @@ real-world use. All existing architecture and security boundaries preserved.
   (main thread only; never an import side effect).
 - Tests: `tests/test_phase7_lifecycle.py`.
 
-### Environment diagnostics (`kinetic/environment/diagnostics.py`)
+### Environment diagnostics (`environment/diagnostics.py`)
 - `list_managed_containers()`, `find_stale_containers()`: read-only inspection
   of `kinetic.managed=true` labeled containers. NEVER destroys automatically.
 - `destroy_container(id)`: explicit, label-gated (refuses non-managed).
@@ -488,3 +491,45 @@ real-world use. All existing architecture and security boundaries preserved.
 
 725 tests pass (485 prior + 240 new Phase 7). 16 skipped (12 docker + 4 live
 SDK without key). Ruff clean. No secrets committed.
+
+## Phase 7.2 scope (DONE — repository/package namespace flattening)
+A surgical layout migration only — NO behavior change. The `kinetic/` package
+namespace was removed; application source now lives as top-level packages and
+modules directly at the repository root.
+- Moved `kinetic/<domain>/` → `<domain>/` for all 14 domains (agent, cli, config,
+  context, dependencies, environment, events, intelligence, memory,
+  observability, project, security, tasks, tools) + `kinetic/{errors,lifecycle,
+  paths}.py` → root + `kinetic/__init__.py` → root `__init__.py`.
+- Imports migrated: `from kinetic.X import ...` → `from X import ...` across all
+  source + tests; dotted-string refs (unittest.patch, importlib.import_module,
+  __import__) updated too.
+- Packaging (`pyproject.toml`): Hatchling `only-include` lists the 14 packages +
+  the 3 root-level modules; entrypoint `kinetic = "cli.main:main"`. The wheel
+  ships exactly the application source (no tests/, no .venv/, no build/).
+- Product identifiers PRESERVED (NOT imports, unchanged): MCP server name
+  `"kinetic"`, Docker ownership labels (`kinetic.managed`, `kinetic.environment`,
+  `kinetic.session_id`), CLI command `kinetic`, `~/.kinetic/` data dir, env
+  prefix `KINETIC_`. These are product names, not the removed Python namespace.
+- `test_phase7_security.py` SRC path (was `src/kinetic`) now scans the 14
+  root-level source dirs + root modules — same security-audit coverage, new
+  location.
+- No `kinetic/` or `src/` directory remains. No compatibility wrappers left.
+725 tests pass, 16 skipped. Ruff clean. Wheel builds + installs in clean venv +
+editable; CLI `kinetic` + all task subcommands work. No behavior change.
+
+## Phase 7.2 gotchas
+- The `kinetic` package namespace is GONE. Do NOT reintroduce `from kinetic...`
+  imports — they will fail at runtime in the installed wheel (only root-level
+  packages exist). New code imports `from agent`, `from tasks`, etc.
+- `kinetic` as a STRING (MCP server name, Docker labels, CLI command, data dir,
+  env prefix) is a product identifier and is INTENTIONALLY kept — grep must
+  distinguish product-name strings from Python import paths.
+- Hatchling `only-include` (not `packages`) is required because the layout mixes
+  package directories with loose root-level `.py` modules; `packages` alone would
+  omit `errors.py`/`lifecycle.py`/`paths.py` from the wheel.
+- `test_phase7_security.py` no longer has a single `SRC` dir; it scans an
+  explicit list of source roots so the unsafe-pattern grep still covers all
+  application source without scanning tests/.venv/build.
+
+## TODO Phase 8
+Not started.

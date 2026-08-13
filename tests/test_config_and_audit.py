@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from kinetic.config import Settings
-from kinetic.security import AuditLog
+from config import Settings
+from security import AuditLog
 
 
 def test_settings_defaults(tmp_path):

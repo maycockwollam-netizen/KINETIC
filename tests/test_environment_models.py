@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from kinetic.environment.config import RUNTIME_DOCKER, RUNTIME_LOCAL, EnvironmentConfig
-from kinetic.environment.envvars import EnvironmentVariablePolicy
-from kinetic.environment.network import DEFAULT_NETWORK_POLICY, NetworkPolicy, NetworkRule
-from kinetic.environment.process import ProcessSpec, ProcessState
-from kinetic.environment.resources import ResourceLimits
-from kinetic.environment.states import (
+from environment.config import RUNTIME_DOCKER, RUNTIME_LOCAL, EnvironmentConfig
+from environment.envvars import EnvironmentVariablePolicy
+from environment.network import DEFAULT_NETWORK_POLICY, NetworkPolicy, NetworkRule
+from environment.process import ProcessSpec, ProcessState
+from environment.resources import ResourceLimits
+from environment.states import (
     EnvironmentState,
     require_transition,
     transition_allowed,
 )
-from kinetic.errors import EnvironmentStateError
+from errors import EnvironmentStateError
 
 # --- state machine -----------------------------------------------------------
 
@@ -159,8 +159,8 @@ def test_config_docker_defaults_isolated():
 
 
 def test_config_unknown_runtime_raises(tmp_path: Path):
-    from kinetic.environment import Environment
-    from kinetic.errors import SandboxError
+    from environment import Environment
+    from errors import SandboxError
 
     cfg = EnvironmentConfig(runtime_type="kubernetes")
     with pytest.raises(SandboxError, match="unknown runtime type"):
