@@ -47,6 +47,15 @@ class EventType(StrEnum):
     PROCESS_CANCELLED = "process_cancelled"
     PROCESS_TIMEOUT = "process_timeout"
     PERMISSION_DENIED = "permission_denied"
+    # Phase 4 — memory & context
+    MEMORY_CREATED = "memory_created"
+    MEMORY_UPDATED = "memory_updated"
+    MEMORY_DELETED = "memory_deleted"
+    MEMORY_INVALIDATED = "memory_invalidated"
+    MEMORY_RETRIEVED = "memory_retrieved"
+    MEMORY_CONSOLIDATED = "memory_consolidated"
+    CONTEXT_BUILT = "context_built"
+    CONTEXT_BUDGET_EXCEEDED = "context_budget_exceeded"
 
 
 @dataclass

@@ -33,6 +33,10 @@ class Capability(Flag):
     ENVIRONMENT_EXEC = auto()
     ENVIRONMENT_NETWORK = auto()
     ENVIRONMENT_ADMIN = auto()
+    # Phase 4 — memory capabilities
+    MEMORY_READ = auto()
+    MEMORY_WRITE = auto()
+    MEMORY_DELETE = auto()
 
 
 @dataclass(frozen=True)
@@ -146,5 +150,26 @@ ENVIRONMENT_NETWORK = ToolPermission(
 ENVIRONMENT_ADMIN = ToolPermission(
     capabilities=Capability.ENVIRONMENT_ADMIN,
     description="Administrative environment operations (resource limits, mounts).",
+    destructive=True,
+)
+
+#: Read memory within authorized scope (project/workspace).
+MEMORY_READ = ToolPermission(
+    capabilities=Capability.MEMORY_READ,
+    description="Read and search memory within the authorized project/workspace scope.",
+    destructive=False,
+)
+
+#: Create or update memory (controlled; validated + scope-checked).
+MEMORY_WRITE = ToolPermission(
+    capabilities=Capability.MEMORY_WRITE,
+    description="Create or update a memory record (secret-filtered, scope-enforced).",
+    destructive=True,
+)
+
+#: Delete memory (restricted; invalidation preferred).
+MEMORY_DELETE = ToolPermission(
+    capabilities=Capability.MEMORY_DELETE,
+    description="Delete a memory record (restricted; prefer invalidation).",
     destructive=True,
 )

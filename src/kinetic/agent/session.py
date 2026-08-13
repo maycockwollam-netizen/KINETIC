@@ -13,11 +13,21 @@ from typing import TYPE_CHECKING, Any
 
 from kinetic.agent.adapter import AgentAdapter
 from kinetic.config import Settings
+from kinetic.context import ContextBudget, ContextEngine
 from kinetic.events import EventBus, EventType
+from kinetic.memory import (
+    DeterministicEmbeddingProvider,
+    MemoryManager,
+    Ranker,
+    RankingWeights,
+    Retriever,
+    SQLiteStore,
+)
 from kinetic.security import AuditLog, PermissionPolicy
 from kinetic.tools.base import ToolDefinition, ToolRegistry
 from kinetic.tools.filesystem import filesystem_tools
 from kinetic.tools.git import git_tools
+from kinetic.tools.memory import memory_tools
 from kinetic.tools.project import project_tools
 from kinetic.tools.terminal import CancellationToken, terminal_tool
 
@@ -44,6 +54,10 @@ class SessionConfig:
     allow_environment_exec: bool = True
     allow_environment_network: bool = False
     allow_environment_admin: bool = False
+    # Phase 4 — memory & context
+    allow_memory_read: bool = True
+    allow_memory_write: bool = False
+    allow_memory_delete: bool = False
 
 
 @dataclass
@@ -81,10 +95,58 @@ class AgentSession:
             allow_environment_exec=cfg.allow_environment_exec,
             allow_environment_network=cfg.allow_environment_network,
             allow_environment_admin=cfg.allow_environment_admin,
+            allow_memory_read=cfg.allow_memory_read,
+            allow_memory_write=cfg.allow_memory_write,
+            allow_memory_delete=cfg.allow_memory_delete,
         )
         self.environment = self._build_environment()
+        self.memory = self._build_memory()
+        self.context = self._build_context_engine()
         self.registry = self._build_registry(cfg.workspace)
         self._adapter: AgentAdapter | None = None
+
+    def _build_memory(self) -> MemoryManager:
+        """Build the memory subsystem (store + embeddings + manager).
+
+        Uses the deterministic local embedding provider so no external service
+        or API key is required. The SQLite store persists across runs under
+        the configured memory db path.
+        """
+        store = SQLiteStore(self.settings.memory_db_path)
+        embeddings = DeterministicEmbeddingProvider(dimension=self.settings.embedding_dimensions)
+        weights = RankingWeights(
+            semantic=self.settings.semantic_weight,
+            lexical=self.settings.lexical_weight,
+            recency=self.settings.recency_weight,
+            importance=self.settings.importance_weight,
+        )
+        ranker = Ranker(weights)
+        retriever = Retriever(
+            store, embeddings, ranker, candidate_limit=self.settings.memory_candidate_limit
+        )
+        return MemoryManager(
+            store=store,
+            embeddings=embeddings,
+            retriever=retriever,
+            events=self.events,
+            audit=self.audit,
+            session_id=self.session_id,
+        )
+
+    def _build_context_engine(self) -> ContextEngine:
+        budget = ContextBudget(
+            max_memory_items=self.settings.context_max_memory_items,
+            max_characters=self.settings.context_max_characters,
+            max_project_metadata_chars=self.settings.context_max_project_metadata_chars,
+            max_recent_events=self.settings.context_max_recent_events,
+            max_task_history_items=self.settings.context_max_task_history_items,
+        )
+        return ContextEngine(
+            memory=self.memory,
+            budget=budget,
+            events=self.events,
+            session_id=self.session_id,
+        )
 
     def _build_environment(self) -> Environment:
         """Build the sandboxed execution environment for this session."""
@@ -160,6 +222,14 @@ class AgentSession:
             max_timeout=self.settings.max_command_timeout,
         ):
             registry.register(t)
+        for t in memory_tools(
+            manager=self.memory,
+            policy=self.policy,
+            audit=self.audit,
+            events=self.events,
+            session_id=self.session_id,
+        ):
+            registry.register(t)
         return registry
 
     def build_adapter(self) -> AgentAdapter:
@@ -175,9 +245,34 @@ class AgentSession:
             max_turns=self.cfg.max_turns,
             fallback_model=self.settings.fallback_model,
             max_budget_usd=self.settings.max_budget_usd,
-            system_prompt=self.cfg.system_prompt,
+            system_prompt=self._effective_system_prompt(),
         )
         return self._adapter
+
+    def _effective_system_prompt(self) -> str | None:
+        """Base system prompt; augmented with assembled context at run time."""
+        return self.cfg.system_prompt
+
+    async def _assemble_context(self) -> str | None:
+        """Build a bounded context package and render it for the system prompt.
+
+        Failure-safe: if assembly fails the task continues with the base prompt
+        only — the agent is never given fabricated memories, and a memory
+        backend failure never blocks the run.
+        """
+        try:
+            package = await self.context.build(
+                task=self.cfg.prompt,
+                project_id=str(self.cfg.workspace),
+            )
+            rendered = package.render()
+            if not rendered.strip():
+                return None
+            prefix = "## KINETIC Context\nThe following is selectively retrieved project context. Use it, but verify against the actual workspace.\n"
+            return prefix + rendered
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully
+            self.events.emit(EventType.AGENT_ERROR, self.session_id, action="context_build", reason=str(exc))
+            return None
 
     async def run(self) -> SessionResult:
         """Connect, run the prompt, disconnect, and return the outcome.
@@ -185,7 +280,22 @@ class AgentSession:
         The sandboxed environment is always torn down (stop + destroy) in a
         ``finally`` block, so a provisioning failure, a model error, or an
         interrupted session never leaves a container behind.
+
+        Phase 4: a bounded context package is assembled before the model run and
+        merged into the system prompt. Memory/context failures degrade
+        gracefully (base prompt only) and never block the task or fabricate
+        memories. Assistant responses are NOT auto-persisted as memory.
         """
+        # Assemble context first (failure-safe), then (re)build the adapter so
+        # the system prompt reflects it.
+        context_block = await self._assemble_context()
+        base_prompt = self.cfg.system_prompt
+        if context_block:
+            self.cfg.system_prompt = (
+                (base_prompt + "\n\n" if base_prompt else "") + context_block
+            )
+        else:
+            self.cfg.system_prompt = base_prompt
         adapter = self._adapter or self.build_adapter()
         events_snapshot: list[dict[str, Any]] = []
         # Provision the sandboxed environment for this run; fail closed if it

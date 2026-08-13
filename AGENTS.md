@@ -124,8 +124,65 @@ daemon available (skipped otherwise). Ruff clean. Commit d93323c.
 - Lazy runtime import: environment.environment._select_runtime imports
   LocalRuntime/DockerRuntime lazily so the local path stays Docker-free.
 
-## TODO Phase 4
-Not started. Do NOT implement until Phase 3 is committed & reported.
+## Phase 4 scope (DONE)
+Memory & Context Engine. Selective hybrid-retrieval memory system — NOT a raw
+conversation dump. Only validated facts become persistent memory.
+- `src/kinetic/memory/`: models (MemoryRecord, MemoryScope EPHEMERAL/TASK/
+  PROJECT/AGENT, compute_content_hash), embeddings (EmbeddingProvider ABC +
+  DeterministicEmbeddingProvider — hashing-trick, local, no network/API key),
+  metadata (MemoryFilter with project isolation + SecretDetector), store
+  (MemoryStore ABC + SQLiteStore — metadata+content+embeddings in one SQLite
+  file; lexical=tokenized LIKE scan, semantic=in-process cosine over stored
+  embeddings, both bounded by candidate limit; invalidate bumps version),
+  retrieval (Retriever gathers lexical+semantic candidates, propagates store
+  errors so callers degrade — never fabricates), ranking (Ranker combines
+  semantic*lexical*recency*importance, weights normalized to sum=1, confidence
+  modulates to resolve conflicts), lifecycle (MemoryManager: create/update/
+  delete/retrieve/search/invalidate/scope/consolidate; secret-filtered;
+  dedup via content_hash; invalidation-preferred over delete; failure-safe),
+  providers/ (extension point).
+- `src/kinetic/context/`: ContextBudget (max memory items/chars/project
+  metadata/recent events/task history), ContextEngine (assembles bounded
+  package: task + relevant memories + project metadata + workspace state +
+  recent events + task history; ranks/trims to budget; records omissions;
+  failure-safe degradation — memory backend failure yields empty memories +
+  note, never fabricates), ContextPackage.render().
+- Memory tools (memory_search/get/create/update/delete) via EXISTING
+  ToolRegistry; MEMORY_READ/WRITE/DELETE capabilities; write+delete off by
+  default. Project-scoped memory enforces boundaries (WHERE clause, not
+  after-the-fact pruning).
+- New events: MEMORY_CREATED/UPDATED/DELETED/INVALIDATED/RETRIEVED/
+  CONSOLIDATED, CONTEXT_BUILT, CONTEXT_BUDGET_EXCEEDED. New errors:
+  MemoryError/MemorySecurityError/ContextError. Settings: memory_db_path,
+  embedding dimensions, hybrid weights, candidate/search limits, context
+  budget fields, allow_memory_read/write/delete. SessionConfig same flags.
+- AgentSession integration: builds MemoryManager + ContextEngine; run()
+  assembles a bounded context (failure-safe) and merges into system prompt
+  BEFORE the model run. Assistant responses are NOT auto-persisted (only
+  validated, explicit memory_create persists).
+270 tests pass (183 prior + 87 new Phase 4). Ruff clean.
+
+## Phase 4 gotchas
+- Deterministic embeddings use a hashing trick (blake2b bucket assignment) so
+  identical text -> identical vector; similar texts share buckets -> cosine>0.
+  Tests must use queries that share tokens with stored memories.
+- Project isolation is a WHERE clause (`project_id = ?`), enforced at the store
+  layer — a bare `list()` excludes invalidated rows even with no filter.
+- Retriever PROPAGATES store errors (does NOT swallow) so the manager raises
+  MemoryError and ContextEngine can degrade gracefully. It only swallows
+  per-signal "no candidates" (e.g. empty query).
+- `MemoryManager._fail` emits `AGENT_ERROR` (no MEMORY_FAILED event type per
+  spec) + audit; memory failures never corrupt task execution.
+- Secret detection is conservative (false positives OK = reject; mask snippets
+  in audit so raw secrets never land in logs).
+- Confidence modulates final score via `base*(0.5+0.5*confidence)` — fresh
+  high-confidence facts outrank stale low-confidence ones without zeroing a
+  genuinely relevant memory.
+- ContextEngine fetches `max_memory_items*2` candidates then caps, so omissions
+  are recorded for relevant-but-cut memories.
+
+## TODO Phase 5
+Not started. Do NOT implement until Phase 4 is committed & reported.
 
 ## Phase 3 FINAL HARDENING (DONE — security/correctness/reliability only, no new features)
 Verified & fixed only security/correctness/reliability/integration issues:

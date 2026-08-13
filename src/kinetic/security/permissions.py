@@ -48,6 +48,9 @@ class PermissionPolicy:
         allow_environment_exec: bool = True,
         allow_environment_network: bool = False,
         allow_environment_admin: bool = False,
+        allow_memory_read: bool = True,
+        allow_memory_write: bool = False,
+        allow_memory_delete: bool = False,
     ) -> None:
         self._writable_roots = [r.resolve() for r in (writable_roots or [])]
         self._allow_network = allow_network
@@ -58,6 +61,9 @@ class PermissionPolicy:
         self._allow_env_exec = allow_environment_exec
         self._allow_env_network = allow_environment_network
         self._allow_env_admin = allow_environment_admin
+        self._allow_memory_read = allow_memory_read
+        self._allow_memory_write = allow_memory_write
+        self._allow_memory_delete = allow_memory_delete
 
     def evaluate(self, tool_name: str, permission: ToolPermission, tool_input: dict) -> Decision:
         caps = permission.capabilities
@@ -84,6 +90,14 @@ class PermissionPolicy:
             return Decision.deny("environment network access is disabled")
         if Capability.ENVIRONMENT_ADMIN in caps and not self._allow_env_admin:
             return Decision.deny("environment admin operations are disabled")
+
+        # Phase 4 — memory capabilities (read on by default; write/delete off).
+        if Capability.MEMORY_READ in caps and not self._allow_memory_read:
+            return Decision.deny("memory read is disabled")
+        if Capability.MEMORY_WRITE in caps and not self._allow_memory_write:
+            return Decision.deny("memory write is disabled")
+        if Capability.MEMORY_DELETE in caps and not self._allow_memory_delete:
+            return Decision.deny("memory delete is disabled")
 
         if Capability.WRITE_FS in caps:
             target = tool_input.get("path") or tool_input.get("file_path")

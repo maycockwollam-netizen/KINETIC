@@ -29,6 +29,12 @@ def test_session_builds_registry(workspace: Path, settings):
         "scan_project",
         "detect_dependencies",
         "install_dependencies",
+        # Phase 4 — memory tools
+        "memory_search",
+        "memory_get",
+        "memory_create",
+        "memory_update",
+        "memory_delete",
     }
     assert session.audit is not None
     assert session.events is not None

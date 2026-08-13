@@ -99,3 +99,19 @@ class DependencyError(KINETICError):
 
 class StorageError(KINETICError):
     """Persistent storage failed."""
+
+
+class MemoryError(KINETICError):
+    """The memory subsystem failed (store, retrieval, consolidation)."""
+
+
+class MemorySecurityError(MemoryError):
+    """A memory operation violated a security boundary (secret, scope)."""
+
+    def __init__(self, message: str, *, reason: str | None = None) -> None:
+        self.reason = reason
+        super().__init__(message)
+
+
+class ContextError(KINETICError):
+    """The context engine failed to assemble a context package."""

@@ -47,3 +47,35 @@ async def test_subscription_close_removes_subscriber():
     sub.close()
     bus.emit(EventType.AGENT_STARTED, "s1")
     assert len(bus.history) == 1
+
+
+# --- Phase 4: memory/context events --------------------------------------
+
+
+def test_memory_event_types_exist():
+    assert EventType.MEMORY_CREATED.value == "memory_created"
+    assert EventType.MEMORY_UPDATED.value == "memory_updated"
+    assert EventType.MEMORY_DELETED.value == "memory_deleted"
+    assert EventType.MEMORY_INVALIDATED.value == "memory_invalidated"
+    assert EventType.MEMORY_RETRIEVED.value == "memory_retrieved"
+    assert EventType.MEMORY_CONSOLIDATED.value == "memory_consolidated"
+    assert EventType.CONTEXT_BUILT.value == "context_built"
+    assert EventType.CONTEXT_BUDGET_EXCEEDED.value == "context_budget_exceeded"
+
+
+def test_memory_events_round_trip():
+    bus = EventBus()
+    ev = bus.emit(EventType.MEMORY_CREATED, "s1", memory_id="m1", memory_type="project")
+    d = ev.to_dict()
+    assert d["type"] == "memory_created"
+    assert d["data"]["memory_id"] == "m1"
+    assert d["data"]["memory_type"] == "project"
+
+
+def test_context_events_round_trip():
+    bus = EventBus()
+    bus.emit(EventType.CONTEXT_BUILT, "s1", memory_count=3)
+    bus.emit(EventType.CONTEXT_BUDGET_EXCEEDED, "s1", omissions=2)
+    types = [e.type for e in bus.history]
+    assert EventType.CONTEXT_BUILT in types
+    assert EventType.CONTEXT_BUDGET_EXCEEDED in types

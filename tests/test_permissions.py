@@ -62,3 +62,42 @@ def test_capability_flags_compose():
     assert Capability.NETWORK not in combo
     perm = ToolPermission(capabilities=combo)
     assert Capability.WRITE_FS in perm.capabilities
+
+
+# --- Phase 4: memory capabilities ----------------------------------------
+
+
+def test_memory_read_allowed_by_default():
+    from kinetic.security import MEMORY_READ
+
+    policy = PermissionPolicy()
+    assert policy.evaluate("memory_search", MEMORY_READ, {"query": "x"}).allowed
+
+
+def test_memory_write_denied_by_default():
+    from kinetic.security import MEMORY_WRITE
+
+    policy = PermissionPolicy()
+    d = policy.evaluate("memory_create", MEMORY_WRITE, {"content": "x"})
+    assert not d.allowed
+    assert "memory write" in d.reason.lower()
+
+
+def test_memory_delete_denied_by_default():
+    from kinetic.security import MEMORY_DELETE
+
+    policy = PermissionPolicy()
+    d = policy.evaluate("memory_delete", MEMORY_DELETE, {"id": "x"})
+    assert not d.allowed
+
+
+def test_memory_write_allowed_when_enabled():
+    from kinetic.security import MEMORY_WRITE
+
+    policy = PermissionPolicy(allow_memory_write=True)
+    assert policy.evaluate("memory_create", MEMORY_WRITE, {"content": "x"}).allowed
+
+
+def test_memory_capabilities_are_distinct_flags():
+    assert Capability.MEMORY_READ is not Capability.MEMORY_WRITE
+    assert Capability.MEMORY_DELETE is not Capability.MEMORY_WRITE

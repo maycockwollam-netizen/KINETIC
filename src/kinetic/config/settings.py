@@ -62,7 +62,33 @@ class Settings(BaseModel):
     allow_environment_network: bool = False
     allow_environment_admin: bool = False
 
-    @field_validator("workspace_root", "session_root", "audit_log_path", mode="after")
+    # --- Phase 4: memory & context --------------------------------------
+    # Root directory for the persistent memory database (SQLite).
+    memory_db_path: Path = Field(default_factory=lambda: Path.home() / ".kinetic" / "memory.db")
+    # Embedding provider type: "deterministic" (local, no network) or
+    # "openai"/"anthropic"-style in future. Phase 4 ships deterministic only.
+    embedding_provider: str = "deterministic"
+    embedding_dimensions: int = 64
+    # Hybrid retrieval weights (must sum > 0; none dominates unless one is ~0).
+    semantic_weight: float = 0.4
+    lexical_weight: float = 0.3
+    recency_weight: float = 0.15
+    importance_weight: float = 0.15
+    # Bounded retrieval defaults.
+    memory_candidate_limit: int = 50
+    memory_search_limit: int = 10
+    # Context budget defaults.
+    context_max_memory_items: int = 8
+    context_max_characters: int = 12000
+    context_max_project_metadata_chars: int = 4000
+    context_max_recent_events: int = 20
+    context_max_task_history_items: int = 6
+    # Permission flags for memory (read on by default; write/delete off).
+    allow_memory_read: bool = True
+    allow_memory_write: bool = False
+    allow_memory_delete: bool = False
+
+    @field_validator("workspace_root", "session_root", "audit_log_path", "memory_db_path", mode="after")
     @classmethod
     def _abs(cls, v: Path) -> Path:
         return v.expanduser().resolve()
@@ -112,6 +138,7 @@ class Settings(BaseModel):
         for p in (self.workspace_root, self.session_root):
             p.mkdir(parents=True, exist_ok=True)
         self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.memory_db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def writable_roots(self) -> list[Path]:
         roots = list(self.allowed_writable_roots) or [self.workspace_root]
