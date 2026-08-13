@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from kinetic.agent.adapter import AgentAdapter
 from kinetic.config import Settings
-from kinetic.events import EventBus
+from kinetic.events import EventBus, EventType
 from kinetic.security import AuditLog, PermissionPolicy
 from kinetic.tools.base import ToolDefinition, ToolRegistry
 from kinetic.tools.filesystem import filesystem_tools
@@ -180,7 +180,12 @@ class AgentSession:
         return self._adapter
 
     async def run(self) -> SessionResult:
-        """Connect, run the prompt, disconnect, and return the outcome."""
+        """Connect, run the prompt, disconnect, and return the outcome.
+
+        The sandboxed environment is always torn down (stop + destroy) in a
+        ``finally`` block, so a provisioning failure, a model error, or an
+        interrupted session never leaves a container behind.
+        """
         adapter = self._adapter or self.build_adapter()
         events_snapshot: list[dict[str, Any]] = []
         # Provision the sandboxed environment for this run; fail closed if it
@@ -188,40 +193,61 @@ class AgentSession:
         try:
             await self.environment.provision()
         except Exception as exc:  # noqa: BLE001
+            await self._teardown_environment()
             return SessionResult(
                 session_id=self.session_id,
                 success=False,
                 error=f"environment provisioning failed: {exc}",
                 events=[e.to_dict() for e in self.events.history],
             )
-        async with self.events.subscribe() as sub:
-            try:
-                async with adapter:
-                    result = await adapter.query(self.cfg.prompt, session_id=self.session_id)
-            except Exception as exc:  # noqa: BLE001
-                return SessionResult(
-                    session_id=self.session_id,
-                    success=False,
-                    error=str(exc),
-                    events=events_snapshot,
-                )
-            # Drain remaining events.
-            async for ev in sub:
-                events_snapshot.append(ev.to_dict())
-                break  # only peek one post-run; full history below
-        events_snapshot = [e.to_dict() for e in self.events.history]
-        # Tear down the environment (stop + destroy) regardless of outcome.
+        result: Any = None
         try:
-            await self.environment.stop()
-            await self.environment.destroy()
-        except Exception:  # noqa: BLE001 - best-effort cleanup
-            pass
+            sub = await self.events.subscribe()
+            try:
+                try:
+                    async with adapter:
+                        result = await adapter.query(self.cfg.prompt, session_id=self.session_id)
+                except Exception as exc:  # noqa: BLE001
+                    return SessionResult(
+                        session_id=self.session_id,
+                        success=False,
+                        error=str(exc),
+                        events=[e.to_dict() for e in self.events.history],
+                    )
+                # Drain remaining events.
+                async for ev in sub:
+                    events_snapshot.append(ev.to_dict())
+                    break  # only peek one post-run; full history below
+            finally:
+                sub.close()
+            events_snapshot = [e.to_dict() for e in self.events.history]
+            success = bool(result and not getattr(result, "is_error", False))
+            result_text = getattr(result, "result", None) if result else None
+        finally:
+            await self._teardown_environment()
         return SessionResult(
             session_id=self.session_id,
-            success=bool(result and not getattr(result, "is_error", False)),
-            result_text=getattr(result, "result", None) if result else None,
+            success=success,
+            result_text=result_text,
             events=events_snapshot,
         )
+
+    async def _teardown_environment(self) -> None:
+        """Stop + destroy the environment, surfacing — but not fatal — failures.
+
+        Cleanup failures are recorded as events/audit by the Environment rather
+        than silently swallowed, yet never mask the run's own outcome.
+        """
+        try:
+            await self.environment.stop()
+        except Exception as exc:  # noqa: BLE001 - record, continue to destroy
+            self.events.emit(EventType.ENVIRONMENT_FAILED, self.session_id,
+                             reason=f"stop failed: {exc}", runtime=self.environment.config.runtime_type)
+        try:
+            await self.environment.destroy()
+        except Exception as exc:  # noqa: BLE001 - record, do not raise
+            self.events.emit(EventType.ENVIRONMENT_FAILED, self.session_id,
+                             reason=f"destroy failed: {exc}", runtime=self.environment.config.runtime_type)
 
 
 def build_session(settings: Settings, cfg: SessionConfig) -> AgentSession:

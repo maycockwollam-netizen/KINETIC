@@ -10,8 +10,8 @@ Isolation enforced:
   * filesystem: only the workspace (and explicitly allowed mounts) are bind-mounted
     read-write; the host home dir, SSH creds and cloud creds are NEVER mounted.
   * network: ``DENY`` -> ``--network none``; ``ALLOW`` -> default bridge;
-    ``RESTRICTED`` -> ``--network none`` plus an explicit egress note (we do not
-    stand up proxy infra; restricted callers must supply a pre-built network).
+    ``RESTRICTED`` is NOT supported (no egress-filtering infrastructure) and
+    fails closed with a clear error rather than silently becoming DENY.
   * resource limits: ``--cpus``, ``--memory``, ``--pids-limit`` (and a container
     timeout via the process timeout). Disk is enforced via storage options where
     the daemon supports it; otherwise it fails closed if requested.
@@ -27,6 +27,7 @@ Fail-closed behavior:
 from __future__ import annotations
 
 import contextlib
+import os
 import shlex
 import tempfile
 from pathlib import Path
@@ -39,12 +40,18 @@ from kinetic.environment.runtime import EnvironmentRuntime, RuntimeStatus
 from kinetic.errors import RuntimeUnavailableError, SandboxError
 from kinetic.tools.terminal import CancellationToken, run_command
 
-#: Whether to prefix docker invocations with sudo (needed in this sandbox).
-_USE_SUDO = True
+#: Docker binary configuration. ``sudo`` is NEVER invoked silently: it is only
+#: used when explicitly requested via ``KINETIC_DOCKER_SUDO=1``. The docker
+#: binary itself can be overridden with ``KINETIC_DOCKER_CMD``. This keeps
+#: privileged host invocation an explicit, operator-controlled choice — never a
+#: hidden privilege escalation.
+_DOCKER_BINARY = os.environ.get("KINETIC_DOCKER_CMD", "docker")
+_USE_SUDO = os.environ.get("KINETIC_DOCKER_SUDO", "").lower() in ("1", "true", "yes")
 
 
 def _docker_cmd_prefix() -> str:
-    return "sudo docker" if _USE_SUDO else "docker"
+    """Resolve the docker CLI prefix from explicit environment configuration."""
+    return f"sudo {_DOCKER_BINARY}" if _USE_SUDO else _DOCKER_BINARY
 
 
 class DockerRuntime(EnvironmentRuntime):
@@ -113,12 +120,17 @@ class DockerRuntime(EnvironmentRuntime):
         self._stopped = True
 
     async def destroy(self) -> None:
+        cleanup_error: str | None = None
         if self._container_id is not None:
             prefix = _docker_cmd_prefix()
-            # Best-effort remove; ignore failures (container may already be gone).
-            await run_command(
+            res = await run_command(
                 f"{prefix} rm -f {self._container_id}", timeout=30, cancellation=None
             )
+            # A non-zero exit is only a real failure if the container still
+            # exists afterward (it may already have been removed). Surface real
+            # cleanup failures instead of silently dropping them.
+            if res.exit_code != 0 and await self._container_exists(self._container_id):
+                cleanup_error = f"docker rm failed: {res.stderr.strip()}"
         self._container_id = None
         if self._env_file is not None:
             with contextlib.suppress(OSError):
@@ -126,6 +138,17 @@ class DockerRuntime(EnvironmentRuntime):
             self._env_file = None
         self._started = False
         self._stopped = False
+        if cleanup_error is not None:
+            raise SandboxError(cleanup_error)
+
+    async def _container_exists(self, container_id: str) -> bool:
+        """True iff the named container still exists on the daemon."""
+        prefix = _docker_cmd_prefix()
+        res = await run_command(
+            f"{prefix} inspect --type container --format {{{{.Id}}}} {container_id}",
+            timeout=15,
+        )
+        return res.exit_code == 0
 
     async def inspect(self) -> RuntimeStatus:
         detail: dict[str, Any] = {
@@ -162,6 +185,12 @@ class DockerRuntime(EnvironmentRuntime):
             "--env-file", str(self._env_file),
             "-w", "/workspace",
         ]
+        # Label the container so KINETIC-owned environments are identifiable for
+        # ownership tracking and leak detection/cleanup.
+        args += ["--label", "kinetic.managed=true"]
+        args += ["--label", f"kinetic.environment={self._config.label}"]
+        if self.session_id:
+            args += ["--label", f"kinetic.session_id={self.session_id}"]
         args += self._network_args()
         args += self._resource_args()
         # Bind-mount the workspace read-write at /workspace.
@@ -186,14 +215,17 @@ class DockerRuntime(EnvironmentRuntime):
             return ["--network", "none"]
         if net is NetworkPolicy.ALLOW:
             return []  # default bridge
-        # RESTRICTED: we don't stand up proxy infra. Fail closed if rules are
-        # requested but cannot be realized; otherwise treat as DENY.
-        if self._config.network_rules:
-            raise SandboxError(
-                "docker runtime cannot realize RESTRICTED egress rules without "
-                "a pre-built network; supply one or use DENY/ALLOW"
-            )
-        return ["--network", "none"]
+        # RESTRICTED requires real egress-filtering infrastructure (a custom
+        # network + proxy/iptables rules). The docker runtime does not stand
+        # that up, so it fails closed with a clear message rather than silently
+        # reinterpreting RESTRICTED as DENY (which would hide that no filtering
+        # is actually in place). Callers wanting DENY must ask for it directly.
+        rules = "with egress rules" if self._config.network_rules else "without rules"
+        raise SandboxError(
+            f"docker runtime does not support RESTRICTED network policy ({rules}); "
+            "no egress-filtering infrastructure is available. Use DENY for no "
+            "network or ALLOW for unrestricted network."
+        )
 
     def _resource_args(self) -> list[str]:
         r = self._config.resources

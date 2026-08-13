@@ -62,11 +62,15 @@ class LocalRuntime(EnvironmentRuntime):
     async def exec(self, spec: ProcessSpec, *, cancellation: CancellationToken | None = None) -> ProcessResult:
         self._require_started()
         cwd = self._resolve_cwd(spec.cwd)
+        # Build the process environment from the filtered host env, then layer
+        # the spec's explicit env on top. We NEVER pass env=None, which would
+        # cause the subprocess to inherit the full host environment wholesale.
+        env = self._build_process_env(spec.env)
         result = await run_command(
             spec.command,
             cwd=str(cwd),
             timeout=spec.timeout,
-            env=spec.env or None,
+            env=env,
             cancellation=cancellation,
         )
         state = ProcessState.COMPLETED
@@ -139,6 +143,23 @@ class LocalRuntime(EnvironmentRuntime):
             )
 
     # --- helpers -----------------------------------------------------------
+
+    def _build_process_env(self, spec_env: dict[str, str] | None) -> dict[str, str]:
+        """Construct the subprocess environment from policy + spec overrides.
+
+        The host environment is filtered through the configured
+        :class:`EnvironmentVariablePolicy` (which drops denied/secret-named vars
+        and redacts secret-shaped values). The spec's explicit ``env`` is then
+        layered on top so callers can override individual variables. The result
+        is always a concrete dict — never ``None`` — so the subprocess never
+        silently inherits the full host environment.
+        """
+        import os
+
+        base = self._config.env_vars.filter(dict(os.environ))
+        if spec_env:
+            base.update(spec_env)
+        return base
 
     def _resolve_cwd(self, cwd: str) -> Path:
         """Resolve a spec cwd against the workspace, rejecting escapes."""

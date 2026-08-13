@@ -127,6 +127,44 @@ daemon available (skipped otherwise). Ruff clean. Commit d93323c.
 ## TODO Phase 4
 Not started. Do NOT implement until Phase 3 is committed & reported.
 
+## Phase 3 FINAL HARDENING (DONE — security/correctness/reliability only, no new features)
+Verified & fixed only security/correctness/reliability/integration issues:
+- **Permission boundary**: `Environment.exec` now enforces
+  `ENVIRONMENT_EXEC` itself (via `_enforce_exec_permission`) before running —
+  direct callers can no longer bypass the gate. Denials emit
+  `PERMISSION_DENIED` + audit. Tool-level `can_use_tool` checks kept.
+- **Network semantics**: docker `RESTRICTED` now FAILS CLOSED as unsupported
+  (clear `SandboxError`) instead of silently becoming `DENY`. DENY=`--network
+  none`, ALLOW=default bridge. Updated test accordingly.
+- **Env vars**: `LocalRuntime.exec` now builds the subprocess env via
+  `env_vars.filter(host_env)` + spec overrides — NEVER `env=None` (which had
+  silently inherited the full host env). Matches docker runtime behavior.
+- **Process lifecycle**: `run_command` rewritten with `start_new_session=True`
+  + `os.killpg` (process-group kill) + a concurrent cancellation watcher.
+  Timeout & cancellation are now PROMPT (was: only checked in a finally after
+  communicate returned → long sleeps ran to completion). No orphan children
+  keep pipes open. Verified elapsed <5s for 30s sleeps.
+- **Container lifecycle**: containers now carry `--label kinetic.managed=true`,
+  `kinetic.environment`, `kinetic.session_id` for ownership/leak tracking.
+  `EnvironmentRuntime` base has `session_id` attr set by `Environment`.
+  `DockerRuntime.destroy` surfaces real cleanup failures (rm fails + container
+  still exists → `SandboxError`) instead of silently ignoring.
+- **Session teardown**: `AgentSession.run` wraps the run in try/finally so the
+  environment is ALWAYS stopped+destroyed — provisioning failure, model error,
+  or interruption no longer leak containers. Fixed a PRE-EXISTING bug:
+  `async with self.events.subscribe()` was wrong (`subscribe()` is a coroutine
+  returning an object with `close()`, not an async context manager) → now
+  `sub = await self.events.subscribe()` + `finally: sub.close()`. No prior test
+  had exercised `session.run()` past provisioning, so the bug was latent.
+- **Docker config**: hard-coded `_USE_SUDO=True` replaced with explicit env
+  config: `KINETIC_DOCKER_SUDO` (1/true) and `KINETIC_DOCKER_CMD`. sudo is
+  never invoked silently. conftest.py sets `KINETIC_DOCKER_SUDO=1` for tests
+  in the root-owned-socket sandbox.
+- **Audit/event**: exec denials audited + emitted; destroy failures surfaced as
+  `ENVIRONMENT_FAILED` event + audit. No secret values logged (ProcessSpec
+  logs env_keys only; audit detail logs command+cwd only).
+195 tests pass (175 prior + 10 docker + 10 new hardening). Ruff clean.
+
 ## Conventions
 - Package import root: `kinetic`. Source under `src/kinetic`.
 - Use `pydantic` v2 for structured data/config. Use `anyio` for async (SDK uses anyio).

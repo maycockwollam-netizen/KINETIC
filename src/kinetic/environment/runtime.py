@@ -57,6 +57,10 @@ class EnvironmentRuntime(ABC):
     def __init__(self, workspace: Path, config: EnvironmentConfig) -> None:
         self._workspace = workspace.resolve()
         self._config = config
+        #: Optional correlation id set by the Environment so concrete runtimes
+        #: can tag the resources they create (e.g. container labels) for
+        #: ownership tracking and leak detection. ``None`` until assigned.
+        self.session_id: str | None = None
 
     @property
     def workspace(self) -> Path:

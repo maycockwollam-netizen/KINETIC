@@ -71,6 +71,7 @@ class Environment:
         self._session_id = session_id
         self._state = EnvironmentState.CREATING
         self._runtime = runtime if runtime is not None else _select_runtime(config)(self._workspace, config)
+        self._runtime.session_id = session_id  # tag runtime for label correlation
         self._emit(EventType.ENVIRONMENT_CREATED, workspace=str(self._workspace),
                    runtime=config.runtime_type, network=config.network.value)
 
@@ -142,13 +143,16 @@ class Environment:
         """Execute a process spec inside the environment.
 
         Requires RUNNING state. The permission policy (if configured) is
-        consulted for the ENVIRONMENT_EXEC capability. All outcomes are audited
-        and emitted as events, including timeouts and cancellation.
+        consulted for the ENVIRONMENT_EXEC capability *here* — not only at the
+        tool gate — so direct callers cannot bypass the security boundary.
+        All outcomes are audited and emitted as events, including denials,
+        timeouts and cancellation.
         """
         if not self.is_running():
             raise EnvironmentStateError(
                 f"cannot exec in environment state {self._state.value}"
             )
+        self._enforce_exec_permission(spec)
         self._audit_exec(spec)
         self._emit(EventType.PROCESS_STARTED, command=spec.command, cwd=spec.cwd)
         try:
@@ -164,6 +168,33 @@ class Environment:
                        exit_code=result.exit_code, duration_ms=result.duration_ms,
                        state=result.state.value)
         return result
+
+    def _enforce_exec_permission(self, spec: ProcessSpec) -> None:
+        """Enforce the ENVIRONMENT_EXEC capability at the environment boundary.
+
+        This is the defense-in-depth gate that closes the direct-call bypass:
+        even if a caller invokes ``Environment.exec`` without going through the
+        adapter's ``can_use_tool`` hook, the policy is still consulted. A denial
+        is audited and emitted as a PERMISSION_DENIED event before raising.
+        """
+        if self._policy is None:
+            return
+        from kinetic.security.policy import ENVIRONMENT_EXEC
+
+        decision = self._policy.evaluate("run_command", ENVIRONMENT_EXEC,
+                                         {"command": spec.command, "cwd": spec.cwd})
+        if not decision.allowed:
+            self._emit(EventType.PERMISSION_DENIED, tool="run_command",
+                       reason=decision.reason, command=spec.command)
+            if self._audit is not None:
+                self._audit.record(
+                    session_id=self._session_id, action="permission",
+                    tool="run_command", allowed=False, reason=decision.reason,
+                    detail={"command": spec.command, "cwd": spec.cwd},
+                )
+            from kinetic.errors import PermissionDeniedError
+
+            raise PermissionDeniedError("run_command", decision.reason)
 
     async def stop(self) -> None:
         """RUNNING -> STOPPING -> STOPPED."""

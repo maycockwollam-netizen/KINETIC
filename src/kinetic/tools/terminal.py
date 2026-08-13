@@ -41,7 +41,18 @@ async def run_command(
     env: dict[str, str] | None = None,
     cancellation: CancellationToken | None = None,
 ) -> CommandResult:
-    """Execute a command with timeout + cancellation support."""
+    """Execute a command with timeout + cancellation support.
+
+    Both timeout and cancellation promptly terminate the process: a watcher
+    task races ``proc.communicate()`` against the timeout deadline and the
+    cancellation token, killing the whole process *group* as soon as either
+    fires. Starting a new session (process group) ensures that killing the
+    shell also kills its children (e.g. ``sleep``), so no orphan keeps the
+    stdout/stderr pipes open and termination is immediate.
+    """
+    import contextlib
+    import os
+    import signal
     import time
 
     start = time.monotonic()
@@ -51,36 +62,63 @@ async def run_command(
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
         env=env,
+        start_new_session=True,  # child becomes its own process-group leader
     )
 
-    cancelled = False
+    def _kill_group() -> None:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, signal.SIGKILL)
+
+    comm_task = asyncio.ensure_future(proc.communicate())
+
+    async def _wait_for_cancel() -> None:
+        # Poll the cancellation flag until it fires or the process finishes.
+        while not cancellation.cancelled:  # type: ignore[union-attr]
+            if comm_task.done():
+                return
+            await asyncio.sleep(0.05)
+
+    cancel_task: asyncio.Task | None = None
+    if cancellation is not None:
+        cancel_task = asyncio.ensure_future(_wait_for_cancel())
+
+    waiters = [comm_task] + ([cancel_task] if cancel_task else [])
+    done, _pending = await asyncio.wait(waiters, timeout=timeout,
+                                        return_when=asyncio.FIRST_COMPLETED)
+
+    timed_out = not done  # nothing completed before the timeout
+    cancelled = bool(cancel_task is not None and cancel_task in done
+                     and cancellation.cancelled)
+
+    # If the process is still alive, a timeout/cancellation fired: kill the
+    # entire group so children don't keep the pipes open.
+    if proc.returncode is None:
+        _kill_group()
+        with contextlib.suppress(Exception):  # noqa: BLE001
+            await proc.wait()
+
+    # Clean up the watcher task; retrieve whatever communicate captured.
+    if cancel_task is not None and not cancel_task.done():
+        cancel_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await cancel_task
+
     try:
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
-        stdout_b, stderr_b = await proc.communicate()
-        cancelled = True
-    finally:
-        if cancellation is not None and cancellation.cancelled:
-            try:
-                proc.kill()
-                await proc.wait()
-            except ProcessLookupError:
-                pass
-            cancelled = True
+        stdout_b, stderr_b = comm_task.result()
+    except Exception:  # noqa: BLE001 - killed mid-stream: take what we have
+        stdout_b, stderr_b = b"", b""
 
     duration_ms = int((time.monotonic() - start) * 1000)
     exit_code = proc.returncode if proc.returncode is not None else -1
-    if cancelled and exit_code == 0:
+    if cancelled or timed_out:
         exit_code = -1
 
     return CommandResult(
-        exit_code=exit_code if not cancelled else -1,
+        exit_code=exit_code,
         stdout=stdout_b.decode("utf-8", errors="replace"),
         stderr=stderr_b.decode("utf-8", errors="replace"),
         duration_ms=duration_ms,
-        timed_out=cancelled,
+        timed_out=cancelled or timed_out,
     )
 
 

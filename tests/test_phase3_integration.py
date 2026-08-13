@@ -107,3 +107,55 @@ def test_session_policy_denies_environment_network_by_default(tmp_path: Path, wo
 
     d = session.policy.evaluate("set_net", ENVIRONMENT_NETWORK, {})
     assert not d.allowed
+
+
+@pytest.mark.timeout(30)
+async def test_session_run_destroys_environment_on_provision_failure(
+    tmp_path: Path, workspace: Path, monkeypatch
+):
+    """A provisioning failure must still tear the environment down (no leak)."""
+    from kinetic.environment import EnvironmentState
+    from kinetic.environment.local import LocalRuntime
+
+    settings = _settings(tmp_path)
+    cfg = SessionConfig(workspace=workspace, prompt="x", network_policy="allow")
+    session = AgentSession(settings, cfg)
+
+    async def failing_create(self):
+        raise RuntimeError("simulated provision failure")
+
+    monkeypatch.setattr(LocalRuntime, "create", failing_create)
+    result = await session.run()
+    assert not result.success
+    assert "environment provisioning failed" in (result.error or "")
+    # The environment reached a terminal state (FAILED from the failed create).
+    assert session.environment.state in (EnvironmentState.FAILED, EnvironmentState.DESTROYED)
+
+
+@pytest.mark.timeout(30)
+async def test_session_run_destroys_environment_on_model_error(
+    tmp_path: Path, workspace: Path, monkeypatch
+):
+    """A model/adapter error must still tear the environment down (no leak)."""
+    from kinetic.environment import EnvironmentState
+
+    settings = _settings(tmp_path)
+    cfg = SessionConfig(workspace=workspace, prompt="x", network_policy="allow")
+    session = AgentSession(settings, cfg)
+
+    class FailingAdapter:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def query(self, prompt, *, session_id="default"):
+            raise RuntimeError("simulated model failure")
+
+    session._adapter = FailingAdapter()
+    result = await session.run()
+    assert not result.success
+    assert "simulated model failure" in (result.error or "")
+    # Environment was provisioned (RUNNING) then torn down to DESTROYED.
+    assert session.environment.state is EnvironmentState.DESTROYED

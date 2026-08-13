@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import anyio
 import pytest
 
 from kinetic.environment import Environment, EnvironmentConfig, NetworkPolicy
@@ -68,3 +69,57 @@ async def test_terminal_tool_factory_with_environment(tmp_path: Path):
     r = await defn.func({"command": "echo factory"})
     assert "factory" in r["content"][0]["text"]
     await env.destroy()
+
+
+# --- Phase 3 hardening: prompt cancellation + no orphans ---------------------
+
+
+async def test_run_command_cancellation_is_prompt(tmp_path: Path):
+    """Cancellation must kill the process promptly, not after it self-exits.
+
+    Previously the cancellation token was only checked in a ``finally`` block
+    that ran *after* ``communicate`` returned, so a long sleep ran to
+    completion. Now a watcher kills the whole process group on cancel.
+    """
+    import asyncio
+    import time
+
+    from kinetic.tools.terminal import CancellationToken, run_command
+
+    cancel = CancellationToken()
+    start = time.monotonic()
+
+    async def _cancel_after() -> None:
+        await asyncio.sleep(0.4)
+        cancel.cancel()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_cancel_after)
+        res = await run_command("sleep 30", timeout=60, cancellation=cancel)
+
+    elapsed = time.monotonic() - start
+    assert res.timed_out
+    assert res.exit_code == -1
+    assert elapsed < 5, f"cancellation was not prompt: {elapsed:.1f}s"
+
+
+async def test_run_command_no_orphan_after_timeout(tmp_path: Path):
+    """A timed-out child (e.g. ``sleep``) must not survive as an orphan."""
+    import time
+
+    from kinetic.tools.terminal import run_command
+
+    start = time.monotonic()
+    # Use a distinctive duration so the orphan check can target it without
+    # matching its own grep command line.
+    res = await run_command("sleep 37", timeout=0.4)
+    elapsed = time.monotonic() - start
+    assert res.timed_out
+    assert elapsed < 5, f"timeout was not prompt: {elapsed:.1f}s"
+    # Give the reaper a moment; the sleep child must be gone. Match only the
+    # exact `sleep 37` invocation (the [s] trick avoids self-matching grep).
+    import anyio
+
+    await anyio.sleep(0.2)
+    check = await run_command("pgrep -f '[s]leep 37' || echo NO_ORPHAN", timeout=5)
+    assert "NO_ORPHAN" in check.stdout, "orphan process survived timeout"

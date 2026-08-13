@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 from kinetic.config import Settings
+
+# Docker in this sandbox is root-owned, so docker invocations need sudo. This
+# is an explicit, environment-controlled setting (see docker._docker_cmd_prefix)
+# rather than a hidden privilege escalation inside the runtime.
+os.environ.setdefault("KINETIC_DOCKER_SUDO", "1")
 
 
 @pytest.fixture

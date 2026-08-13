@@ -218,3 +218,79 @@ async def test_permission_denial_emits_event_via_policy(tmp_path: Path):
         bus.emit(EventType.PERMISSION_DENIED, "s1", tool="run_command", reason=exc.reason)
     assert any(e.type is EventType.PERMISSION_DENIED for e in bus.history)
     assert any(e["allowed"] is False for e in audit.read())
+
+
+# --- Phase 3 hardening: direct-call permission boundary ----------------------
+
+
+async def test_environment_exec_enforces_policy_on_direct_call(tmp_path: Path):
+    """A direct ``env.exec`` call (bypassing the adapter) must still be gated.
+
+    The Environment enforces ENVIRONMENT_EXEC itself — there is no path that
+    reaches the runtime without the permission policy being consulted.
+    """
+    bus = EventBus()
+    audit = AuditLog(tmp_path / "a.log")
+    policy = PermissionPolicy(allow_environment_exec=False)
+    env = Environment.create(tmp_path / "ws", _local(), policy=policy,
+                             audit=audit, events=bus, session_id="s1")
+    await env.provision()
+    with pytest.raises(PermissionDeniedError):
+        await env.exec(ProcessSpec(command="echo hi", timeout=5))
+    # Denial is emitted as an event and recorded in the audit log.
+    assert any(e.type is EventType.PERMISSION_DENIED for e in bus.history)
+    denied = [e for e in audit.read() if e["action"] == "permission" and not e["allowed"]]
+    assert denied, "exec denial must be audited"
+    await env.destroy()
+
+
+async def test_environment_exec_allowed_when_policy_permits(tmp_path: Path):
+    """When the policy permits exec, a direct call runs normally."""
+    policy = PermissionPolicy(allow_environment_exec=True)
+    env = Environment.create(tmp_path / "ws", _local(), policy=policy, session_id="s1")
+    await env.provision()
+    res = await env.exec(ProcessSpec(command="echo ok", timeout=5))
+    assert res.succeeded
+    await env.destroy()
+
+
+# --- Phase 3 hardening: local runtime never inherits host env ----------------
+
+
+async def test_local_runtime_does_not_inherit_host_env(tmp_path: Path):
+    """Without an explicit env-var allowlist, no host variable is forwarded.
+
+    The local runtime builds the subprocess env from the policy filter (which
+    forwards nothing by default) rather than passing env=None and letting the
+    subprocess inherit the full host environment.
+    """
+    os.environ["KINETIC_HARDENING_LEAK"] = "should-not-leak"
+    try:
+        env = Environment.create(tmp_path / "ws", _local())
+        await env.provision()
+        res = await env.exec(ProcessSpec(
+            command='python3 -c "import os; print(os.environ.get(\'KINETIC_HARDENING_LEAK\', \'ABSENT\'))"',
+            timeout=10,
+        ))
+        assert "ABSENT" in res.stdout
+        assert "should-not-leak" not in res.stdout
+        await env.destroy()
+    finally:
+        os.environ.pop("KINETIC_HARDENING_LEAK", None)
+
+
+async def test_local_runtime_injects_explicit_env(tmp_path: Path):
+    """Explicitly injected vars reach the subprocess; secret-named ones don't."""
+    pol = EnvironmentVariablePolicy(inject={"APP_MODE": "test", "APP_TOKEN": "sk-secret1234567890"})
+    cfg = EnvironmentConfig(runtime_type="local", sandbox_mode=False,
+                            network=NetworkPolicy.ALLOW, env_vars=pol)
+    env = Environment.create(tmp_path / "ws", cfg)
+    await env.provision()
+    res = await env.exec(ProcessSpec(
+        command='python3 -c "import os; print(os.environ.get(\'APP_MODE\', \'ABSENT\')); print(os.environ.get(\'APP_TOKEN\', \'ABSENT\'))"',
+        timeout=10,
+    ))
+    assert "test" in res.stdout  # APP_MODE injected
+    # APP_TOKEN is secret-named -> dropped, never forwarded.
+    assert "sk-secret1234567890" not in res.stdout
+    await env.destroy()

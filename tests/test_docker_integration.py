@@ -171,22 +171,22 @@ async def test_docker_cleanup_removes_container(tmp_path: Path, require_docker):
     assert container_id is not None
     await env.destroy()
     # The container must be gone.
+    from kinetic.environment.docker import _docker_cmd_prefix
     from kinetic.tools.terminal import run_command
 
-    res = await run_command(f"sudo docker inspect --format '{{{{.State.Status}}}}' {container_id}",
-                            timeout=15)
+    res = await run_command(
+        f"{_docker_cmd_prefix()} inspect --format '{{{{.State.Status}}}}' {container_id}",
+        timeout=15,
+    )
     assert res.exit_code != 0  # inspect fails on a removed container
 
 
-async def test_docker_restricted_network_without_rules_is_deny(tmp_path: Path, require_docker):
-    """RESTRICTED with no rules falls back to deny (no proxy infra)."""
+async def test_docker_restricted_network_fails_closed(tmp_path: Path, require_docker):
+    """RESTRICTED is unsupported -> fails closed rather than silently becoming DENY."""
     env = Environment.create(tmp_path / "ws", _docker_cfg(network=NetworkPolicy.RESTRICTED), session_id="d9")
-    await env.provision()
-    res = await env.exec(ProcessSpec(
-        command="python3 -c \"import socket; s=socket.socket(); s.settimeout(3); s.connect(('1.1.1.1',80))\" 2>&1; echo EXIT=$?",
-        timeout=60,
-    ))
-    assert "EXIT=0" not in res.stdout
+    with pytest.raises(SandboxError, match="RESTRICTED"):
+        await env.provision()
+    assert env.state is EnvironmentState.FAILED
     await env.destroy()
 
 
@@ -197,3 +197,58 @@ async def test_docker_disk_limit_unsupported_fails_closed(tmp_path: Path, requir
     with pytest.raises(SandboxError, match="disk"):
         await env.provision()
     assert env.state is EnvironmentState.FAILED
+
+
+async def test_docker_container_has_kinetic_labels(tmp_path: Path, require_docker):
+    """Created containers carry KINETIC ownership labels for leak tracking."""
+    import json
+
+    from kinetic.environment.docker import _docker_cmd_prefix
+    from kinetic.tools.terminal import run_command
+
+    env = Environment.create(tmp_path / "ws", _docker_cfg(), session_id="d11")
+    await env.provision()
+    cid = env.runtime._container_id  # type: ignore[attr-defined]
+    res = await run_command(f"{_docker_cmd_prefix()} inspect {cid}", timeout=15)
+    labels = json.loads(res.stdout)[0]["Config"]["Labels"]
+    assert labels.get("kinetic.managed") == "true"
+    assert labels.get("kinetic.session_id") == "d11"
+    assert "kinetic.environment" in labels
+    await env.destroy()
+
+
+async def test_docker_destroy_surfaces_cleanup_failure(tmp_path: Path, require_docker, monkeypatch):
+    """A real destroy failure is surfaced (event/audit), not silently ignored.
+
+    ``Environment.destroy`` records a runtime cleanup failure as an
+    ``ENVIRONMENT_FAILED`` event + audit entry rather than swallowing it, while
+    still reaching the ``DESTROYED`` terminal state. We simulate the failure
+    with a docker runtime whose ``destroy`` raises.
+    """
+    from kinetic.environment.docker import DockerRuntime
+    from kinetic.errors import SandboxError
+    from kinetic.events import EventBus, EventType
+    from kinetic.security import AuditLog
+
+    bus = EventBus()
+    audit = AuditLog(tmp_path / "d12.log")
+    env = Environment.create(tmp_path / "ws", _docker_cfg(), policy=None,
+                             audit=audit, events=bus, session_id="d12")
+    await env.provision()
+    cid = env.runtime._container_id  # type: ignore[attr-defined]
+
+    async def failing_destroy(self):
+        raise SandboxError("docker rm failed: simulated permission error")
+
+    monkeypatch.setattr(DockerRuntime, "destroy", failing_destroy)
+    # Must not raise — the failure is surfaced via event/audit, not propagated.
+    await env.destroy()
+    assert env.state is EnvironmentState.DESTROYED
+    assert any(e.type is EventType.ENVIRONMENT_FAILED for e in bus.history), \
+        "destroy failure must be surfaced as an event"
+    failed = [e for e in audit.read() if e["action"] == "environment_failed"]
+    assert failed, "destroy failure must be audited"
+    # Restore + real cleanup so no container leaks.
+    monkeypatch.undo()
+    env.runtime._container_id = cid
+    await env.runtime.destroy()
