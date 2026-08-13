@@ -13,13 +13,16 @@ reinterpreted as failed.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kinetic.errors import TaskStateError
 from kinetic.events import EventBus, EventType
 from kinetic.security import AuditLog
 from kinetic.tasks.models import Task, TaskFailure
 from kinetic.tasks.states import TaskState, is_terminal, require_transition, transition_allowed
+
+if TYPE_CHECKING:
+    from kinetic.observability import MetricsCollector
 
 
 class TaskManager:
@@ -37,11 +40,13 @@ class TaskManager:
         audit: AuditLog | None = None,
         session_id: str = "tasks",
         store: Any | None = None,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         self._events = events
         self._audit = audit
         self._session_id = session_id
         self._store = store
+        self._metrics = metrics
         self._tasks: dict[str, Task] = {}
 
     # --- creation / loading ------------------------------------------------
@@ -64,6 +69,10 @@ class TaskManager:
         )
         self._tasks[task.id] = task
         self._emit(EventType.TASK_CREATED, task_id=task.id, workspace=workspace)
+        if self._metrics is not None:
+            from kinetic.observability.metrics import METRIC_TASKS_STARTED
+
+            self._metrics.inc(METRIC_TASKS_STARTED)
         return task
 
     def load(self, task_id: str) -> Task:
@@ -105,6 +114,13 @@ class TaskManager:
         task.completed_at = task.updated_at
         self._emit(EventType.TASK_COMPLETED, task_id=task.id)
         self._audit_record("task_completed", task, allowed=True)
+        if self._metrics is not None:
+            from kinetic.observability.metrics import METRIC_TASK_DURATION, METRIC_TASKS_COMPLETED
+
+            self._metrics.inc(METRIC_TASKS_COMPLETED)
+            duration = _task_duration_seconds(task)
+            if duration is not None:
+                self._metrics.set_gauge(METRIC_TASK_DURATION, duration)
         return task
 
     def mark_failed(self, task_id: str, *, failure: TaskFailure) -> Task:
@@ -122,6 +138,10 @@ class TaskManager:
             task_id=task.id, failure_class=failure.failure_class, message=failure.message,
         )
         self._audit_record("task_failed", task, allowed=False, reason=failure.message)
+        if self._metrics is not None:
+            from kinetic.observability.metrics import METRIC_TASKS_FAILED
+
+            self._metrics.inc(METRIC_TASKS_FAILED)
         return task
 
     # --- attempt tracking --------------------------------------------------
@@ -167,6 +187,10 @@ class TaskManager:
     def _audit_cancel(self, task: Task, reason: str) -> None:
         self._emit(EventType.TASK_CANCELLED, task_id=task.id, reason=reason)
         self._audit_record("task_cancelled", task, allowed=False, reason=reason)
+        if self._metrics is not None:
+            from kinetic.observability.metrics import METRIC_TASKS_CANCELLED
+
+            self._metrics.inc(METRIC_TASKS_CANCELLED)
 
     def _audit_record(
         self, action: str, task: Task, *, allowed: bool, reason: str | None = None
@@ -187,3 +211,22 @@ def default_task_id() -> str:
 
 def workspace_project_id(workspace: str | Path) -> str:
     return str(Path(str(workspace)).resolve())
+
+
+def _task_duration_seconds(task: Task) -> float | None:
+    """Seconds between a task's creation and completion (None if unknown)."""
+    from datetime import UTC, datetime
+
+    created = task.created_at
+    completed = task.completed_at or task.updated_at
+    if not created or not completed:
+        return None
+    if isinstance(created, str):
+        created = datetime.fromisoformat(created)
+    if isinstance(completed, str):
+        completed = datetime.fromisoformat(completed)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    if completed.tzinfo is None:
+        completed = completed.replace(tzinfo=UTC)
+    return max(0.0, (completed - created).total_seconds())

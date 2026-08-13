@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from asyncio import CancelledError
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kinetic.environment.config import RUNTIME_DOCKER, RUNTIME_LOCAL, EnvironmentConfig
 from kinetic.environment.process import ProcessResult, ProcessSpec, ProcessState
@@ -33,6 +33,9 @@ from kinetic.errors import EnvironmentStateError, SandboxError
 from kinetic.events import EventBus, EventType
 from kinetic.security import AuditLog, PermissionPolicy
 from kinetic.tools.terminal import CancellationToken
+
+if TYPE_CHECKING:
+    from kinetic.observability import MetricsCollector
 
 
 def _select_runtime(config: EnvironmentConfig) -> type[EnvironmentRuntime]:
@@ -62,6 +65,7 @@ class Environment:
         audit: AuditLog | None = None,
         events: EventBus | None = None,
         session_id: str = "environment",
+        metrics: MetricsCollector | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
         self._config = config
@@ -69,11 +73,16 @@ class Environment:
         self._audit = audit
         self._events = events
         self._session_id = session_id
+        self._metrics = metrics
         self._state = EnvironmentState.CREATING
         self._runtime = runtime if runtime is not None else _select_runtime(config)(self._workspace, config)
         self._runtime.session_id = session_id  # tag runtime for label correlation
         self._emit(EventType.ENVIRONMENT_CREATED, workspace=str(self._workspace),
                    runtime=config.runtime_type, network=config.network.value)
+        if self._metrics is not None:
+            from kinetic.observability.metrics import METRIC_ENV_CREATED
+
+            self._metrics.inc(METRIC_ENV_CREATED)
 
     # --- construction ------------------------------------------------------
 
@@ -87,13 +96,15 @@ class Environment:
         audit: AuditLog | None = None,
         events: EventBus | None = None,
         session_id: str = "environment",
+        metrics: MetricsCollector | None = None,
     ) -> Environment:
         """Construct an Environment in the CREATING state and provision it.
 
         Provisioning (runtime.create) is synchronous-ish here; if it fails the
         environment transitions to FAILED and the error propagates.
         """
-        env = cls(workspace, config, policy=policy, audit=audit, events=events, session_id=session_id)
+        env = cls(workspace, config, policy=policy, audit=audit, events=events,
+                  session_id=session_id, metrics=metrics)
         return env
 
     async def provision(self) -> None:
@@ -192,6 +203,10 @@ class Environment:
                     tool="run_command", allowed=False, reason=decision.reason,
                     detail={"command": spec.command, "cwd": spec.cwd},
                 )
+            if self._metrics is not None:
+                from kinetic.observability.metrics import METRIC_PERMISSION_DENIALS
+
+                self._metrics.inc(METRIC_PERMISSION_DENIALS)
             from kinetic.errors import PermissionDeniedError
 
             raise PermissionDeniedError("run_command", decision.reason)
@@ -217,6 +232,10 @@ class Environment:
             self._fail(str(exc))
         self._state = EnvironmentState.DESTROYED
         self._emit(EventType.ENVIRONMENT_DESTROYED, runtime=self._config.runtime_type)
+        if self._metrics is not None:
+            from kinetic.observability.metrics import METRIC_ENV_DESTROYED
+
+            self._metrics.inc(METRIC_ENV_DESTROYED)
 
     async def inspect(self) -> RuntimeStatus:
         return await self._runtime.inspect()

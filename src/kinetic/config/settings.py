@@ -3,21 +3,38 @@
 Settings are layered: environment variables > a config file > built-in defaults.
 The settings object is a plain dependency that gets injected into the agent,
 tools, and security policy — nothing reads global state at runtime.
+
+Security-sensitive settings (network, sandbox mode, permission flags) never
+silently fall back to a less-secure value: an invalid value raises
+:class:`~kinetic.errors.ConfigError` at construction time rather than being
+coerced to a safe default.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from kinetic.errors import ConfigError
 
 if TYPE_CHECKING:
     from kinetic.environment.config import EnvironmentConfig
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     """Runtime configuration for the coding agent."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="KINETIC_",
+        env_file=None,
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     # --- Model / SDK -------------------------------------------------------
     model: str = "claude-sonnet-4-5-20250929"
@@ -147,6 +164,204 @@ class Settings(BaseModel):
             raise ValueError(f"runtime_type must be one of {allowed}, got {v!r}")
         return v
 
+    @field_validator("permission_mode", mode="after")
+    @classmethod
+    def _valid_permission_mode(cls, v: str) -> str:
+        allowed = {"default", "acceptEdits", "plan", "bypassPermissions"}
+        if v not in allowed:
+            raise ValueError(f"permission_mode must be one of {allowed}, got {v!r}")
+        return v
+
+    # --- Bounded numeric limits -------------------------------------------
+    # Every untrusted or model-influenced quantity must have a bound so a
+    # misconfiguration cannot create unbounded loops, negative retries, or
+    # pathological resource consumption. Validators raise on invalid values
+    # rather than silently coercing (fail early, fail loud).
+
+    @field_validator("max_turns", mode="after")
+    @classmethod
+    def _bounded_turns(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("max_turns must be >= 1")
+        if v is not None and v > 200:
+            raise ValueError("max_turns must be <= 200")
+        return v
+
+    @field_validator("max_budget_usd", mode="after")
+    @classmethod
+    def _bounded_budget(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError("max_budget_usd must be positive")
+        return v
+
+    @field_validator(
+        "default_command_timeout", "max_command_timeout", "execution_timeout",
+        mode="after",
+    )
+    @classmethod
+    def _positive_timeout(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("timeout values must be positive")
+        return v
+
+    @field_validator("max_command_timeout", mode="after")
+    @classmethod
+    def _max_timeout_cap(cls, v: float) -> float:
+        if v > 86400:
+            raise ValueError("max_command_timeout must be <= 86400 (24h)")
+        return v
+
+    @field_validator("execution_timeout", mode="after")
+    @classmethod
+    def _exec_timeout_cap(cls, v: float) -> float:
+        if v > 86400:
+            raise ValueError("execution_timeout must be <= 86400 (24h)")
+        return v
+
+    @field_validator(
+        "max_step_attempts", "max_task_attempts", "max_replans",
+        "max_plan_steps", "max_plan_dependencies",
+        "max_repair_attempts", "max_verification_attempts",
+        "max_total_recovery_attempts",
+        mode="after",
+    )
+    @classmethod
+    def _non_negative_int(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("retry/limit counts must be non-negative")
+        return v
+
+    @field_validator(
+        "max_step_attempts", "max_task_attempts", "max_replans",
+        "max_repair_attempts", "max_verification_attempts",
+        "max_total_recovery_attempts",
+        mode="after",
+    )
+    @classmethod
+    def _bounded_retries(cls, v: int) -> int:
+        if v > 20:
+            raise ValueError("retry counts must be <= 20")
+        return v
+
+    @field_validator("max_plan_steps", mode="after")
+    @classmethod
+    def _bounded_plan_steps(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_plan_steps must be >= 1")
+        if v > 100:
+            raise ValueError("max_plan_steps must be <= 100")
+        return v
+
+    @field_validator("max_plan_dependencies", mode="after")
+    @classmethod
+    def _bounded_plan_deps(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_plan_dependencies must be >= 1")
+        if v > 50:
+            raise ValueError("max_plan_dependencies must be <= 50")
+        return v
+
+    @field_validator(
+        "observation_max_stdout_chars", "observation_max_stderr_chars",
+        "repair_context_max_chars", "repair_context_max_test_failures",
+        "repair_context_max_changed_files",
+        "context_max_characters", "context_max_project_metadata_chars",
+        "context_max_memory_items", "context_max_recent_events",
+        "context_max_task_history_items",
+        "memory_candidate_limit", "memory_search_limit",
+        "embedding_dimensions",
+        "diff_max_changed_files", "diff_broad_change_threshold",
+        mode="after",
+    )
+    @classmethod
+    def _positive_limit(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("limits must be >= 1")
+        return v
+
+    @field_validator(
+        "observation_max_stdout_chars", "observation_max_stderr_chars",
+        "repair_context_max_chars", "context_max_characters",
+        "context_max_project_metadata_chars",
+        "diff_max_changed_files",
+        mode="after",
+    )
+    @classmethod
+    def _bounded_char_limit(cls, v: int) -> int:
+        if v > 1_000_000:
+            raise ValueError("character limits must be <= 1,000,000")
+        return v
+
+    @field_validator(
+        "memory_candidate_limit", "memory_search_limit",
+        "context_max_memory_items", "context_max_recent_events",
+        "context_max_task_history_items",
+        "repair_context_max_test_failures", "repair_context_max_changed_files",
+        "diff_broad_change_threshold",
+        mode="after",
+    )
+    @classmethod
+    def _bounded_count_limit(cls, v: int) -> int:
+        if v > 10_000:
+            raise ValueError("count limits must be <= 10,000")
+        return v
+
+    @field_validator("memory_limit_mb", "disk_limit_mb", mode="after")
+    @classmethod
+    def _bounded_mb(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("memory/disk limits must be >= 1 MB")
+        return v
+
+    @field_validator("cpu_limit", mode="after")
+    @classmethod
+    def _bounded_cpu(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError("cpu_limit must be positive")
+        return v
+
+    @field_validator("process_limit", mode="after")
+    @classmethod
+    def _bounded_pids(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("process_limit must be >= 1")
+        return v
+
+    @field_validator(
+        "semantic_weight", "lexical_weight", "recency_weight", "importance_weight",
+        mode="after",
+    )
+    @classmethod
+    def _bounded_weight(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("ranking weights must be non-negative")
+        return v
+
+    @field_validator("embedding_dimensions", mode="after")
+    @classmethod
+    def _bounded_dim(cls, v: int) -> int:
+        if v > 4096:
+            raise ValueError("embedding_dimensions must be <= 4096")
+        return v
+
+    @model_validator(mode="after")
+    def _weights_not_all_zero(self) -> Settings:
+        total = (
+            self.semantic_weight + self.lexical_weight
+            + self.recency_weight + self.importance_weight
+        )
+        if total <= 0:
+            raise ValueError("ranking weights must sum to > 0")
+        return self
+
+    @model_validator(mode="after")
+    def _timeout_ordering(self) -> Settings:
+        if self.default_command_timeout > self.max_command_timeout:
+            raise ValueError(
+                "default_command_timeout must be <= max_command_timeout"
+            )
+        return self
+
     def environment_config(self) -> EnvironmentConfig:
         """Build an :class:`EnvironmentConfig` from these settings."""
         from kinetic.environment.config import EnvironmentConfig
@@ -181,3 +396,64 @@ class Settings(BaseModel):
     def writable_roots(self) -> list[Path]:
         roots = list(self.allowed_writable_roots) or [self.workspace_root]
         return [r.expanduser().resolve() for r in roots]
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> Settings:
+        """Load settings from a JSON config file.
+
+        Precedence: environment variables (KINETIC_*) override values in the
+        file, which override built-in defaults. An invalid file raises
+        :class:`~kinetic.errors.ConfigError` — never a silent fallback.
+        """
+        p = Path(path).expanduser()
+        if not p.exists():
+            raise ConfigError(f"config file not found: {p}")
+        try:
+            raw: dict[str, Any] = json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"config file is not valid JSON: {exc}") from exc
+        if not isinstance(raw, dict):
+            raise ConfigError("config file must contain a JSON object")
+        # Build a BaseSettings from the file values first, then let env vars
+        # override by re-validating through the normal constructor so the
+        # env-prefix machinery applies. We do this by merging file values with
+        # any env-provided overrides.
+        try:
+            # First construct from file (captures file values).
+            from_file = cls(**raw)
+            # Then overlay env overrides on top of file values for any env var
+            # that is actually set, so precedence is env > file > default.
+            import os
+
+            overrides: dict[str, Any] = {}
+            prefix = "KINETIC_"
+            for key in cls.model_fields:
+                env_name = prefix + key.upper()
+                if env_name in os.environ:
+                    overrides[key] = os.environ[env_name]
+            if overrides:
+                merged = {**from_file.model_dump(), **overrides}
+                # Re-validate types (e.g. env strings -> int).
+                return cls(**{k: v for k, v in merged.items()})
+            return from_file
+        except ConfigError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - wrap pydantic errors as ConfigError
+            raise ConfigError(f"invalid configuration: {exc}") from exc
+
+
+def load_settings(config_file: str | Path | None = None) -> Settings:
+    """Build a :class:`Settings` from a file (if given) + environment.
+
+    This is the canonical entry point for CLI/production callers: it layers
+    environment variables over an optional config file over the defaults, and
+    wraps any validation failure in :class:`~kinetic.errors.ConfigError`.
+    """
+    try:
+        if config_file is not None:
+            return Settings.from_file(config_file)
+        return Settings()
+    except ConfigError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise ConfigError(f"invalid configuration: {exc}") from exc

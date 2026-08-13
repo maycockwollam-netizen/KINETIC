@@ -209,9 +209,11 @@ class Orchestrator:
         self._settings = settings
         self.events: EventBus = session.events
         self.audit: AuditLog = session.audit
+        self._metrics = getattr(session, "metrics", None)
         self.manager = TaskManager(
             events=self.events, audit=self.audit, session_id=session.session_id,
             store=self._build_store(),
+            metrics=self._metrics,
         )
         self.observer = Observer.from_settings(settings)
         self.verifier = Verifier.from_settings(settings, environment=session.environment, manifest=manifest)
@@ -245,6 +247,7 @@ class Orchestrator:
             repair_coordinator=self.repair_coordinator,
             change_analyzer=self.change_analyzer,
             final_reviewer=self.final_reviewer,
+            metrics=self._metrics,
         )
 
     def _build_intelligence(

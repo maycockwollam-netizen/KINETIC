@@ -28,9 +28,24 @@ def _check_api_key() -> None:
         sys.exit(2)
 
 
+def _load_settings(ctx: click.Context) -> Settings:
+    """Load settings from an optional config file (in context) + env vars."""
+    config_file = ctx.obj.get("config_file") if ctx.obj else None
+    if config_file:
+        from kinetic.config import load_settings
+
+        return load_settings(config_file)
+    return Settings()
+
+
 @click.group()
-def cli() -> None:
+@click.option("--config", "config_file", default=None, type=click.Path(exists=True),
+              help="Path to a JSON config file (env vars still override).")
+@click.pass_context
+def cli(ctx: click.Context, config_file: str | None) -> None:
     """KINETIC coding agent."""
+    ctx.ensure_object(dict)
+    ctx.obj["config_file"] = config_file
 
 
 @cli.command()
@@ -52,7 +67,9 @@ def cli() -> None:
     help="Sandbox network policy (default: deny).",
 )
 @click.option("--dry-run", is_flag=True, default=False, help="Build the session without running the model.")
+@click.pass_context
 def run(
+    ctx: click.Context,
     prompt: str,
     workspace: str,
     model: str | None,
@@ -63,7 +80,7 @@ def run(
     dry_run: bool,
 ) -> None:
     """Run the agent against a workspace with the given prompt."""
-    settings = Settings()
+    settings = _load_settings(ctx)
     settings.ensure_directories()
     ws = Path(workspace).resolve()
     if not ws.exists():

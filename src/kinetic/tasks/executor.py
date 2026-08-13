@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from kinetic.intelligence.models import RepairOutcome
     from kinetic.intelligence.repair import RepairCoordinator
     from kinetic.intelligence.review import FinalReviewer, ReviewResult
+    from kinetic.observability import MetricsCollector
     from kinetic.tasks.checkpoints import CheckpointStore
     from kinetic.tasks.manager import TaskManager
 
@@ -130,6 +131,7 @@ class ExecutionController:
         repair_coordinator: RepairCoordinator | None = None,
         change_analyzer: ChangeAnalyzer | None = None,
         final_reviewer: FinalReviewer | None = None,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         self.manager = manager
         self.runner = runner
@@ -150,8 +152,13 @@ class ExecutionController:
         self.repair_coordinator = repair_coordinator
         self.change_analyzer = change_analyzer
         self.final_reviewer = final_reviewer
+        self._metrics = metrics
 
     # --- top-level orchestration ------------------------------------------
+
+    def _metric_inc(self, name: str) -> None:
+        if self._metrics is not None:
+            self._metrics.inc(name)
 
     async def execute(self, task_id: str, *, plan: Plan | None = None) -> ExecutionOutcome:
         """Plan (if needed) + execute a task to completion.
@@ -292,6 +299,9 @@ class ExecutionController:
                 EventType.TASK_STEP_STARTED, self.session_id,
                 task_id=task.id, step_id=step.step_id, attempt=attempt,
             )
+            from kinetic.observability.metrics import METRIC_STEPS_EXECUTED
+
+            self._metric_inc(METRIC_STEPS_EXECUTED)
             prompt = self._build_step_prompt(task, plan, step)
             result: dict[str, Any] = {}
             runner_error: str | None = None
@@ -489,6 +499,9 @@ class ExecutionController:
 
     async def _verify_task(self, task: Task, plan: Plan, observations: list[Observation]) -> VerificationResult:
         self.events.emit(EventType.TASK_VERIFICATION_STARTED, self.session_id, task_id=task.id, step_id=None)
+        from kinetic.observability.metrics import METRIC_VERIFICATION_ATTEMPTS
+
+        self._metric_inc(METRIC_VERIFICATION_ATTEMPTS)
         result = await self.verifier.verify()
         self.events.emit(
             EventType.TASK_VERIFICATION_COMPLETED, self.session_id,
@@ -509,6 +522,9 @@ class ExecutionController:
         """
         if self.repair_coordinator is None:
             return None
+        from kinetic.observability.metrics import METRIC_REPAIR_ATTEMPTS
+
+        self._metric_inc(METRIC_REPAIR_ATTEMPTS)
         return await self.repair_coordinator.repair(
             failed_verification=failed,
             task_request=task.user_request,

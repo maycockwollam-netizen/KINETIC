@@ -33,6 +33,7 @@ from kinetic.tools.terminal import CancellationToken, terminal_tool
 
 if TYPE_CHECKING:
     from kinetic.environment import Environment
+    from kinetic.observability import MetricsCollector
 
 
 @dataclass
@@ -79,11 +80,13 @@ class AgentSession:
         *,
         session_id: str | None = None,
         cancellation: CancellationToken | None = None,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         self.settings = settings
         self.cfg = cfg
         self.session_id = session_id or uuid.uuid4().hex
         self.cancellation = cancellation or CancellationToken()
+        self.metrics = metrics
         self.events = EventBus()
         self.audit = AuditLog(settings.audit_log_path)
         self.policy = PermissionPolicy(
@@ -188,6 +191,7 @@ class AgentSession:
             audit=self.audit,
             events=self.events,
             session_id=self.session_id,
+            metrics=self.metrics,
         )
 
     def _build_registry(self, workspace: Path) -> ToolRegistry:

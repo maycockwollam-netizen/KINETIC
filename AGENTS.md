@@ -397,3 +397,94 @@ Verified & fixed only security/correctness/reliability/integration issues:
 - Tools expose permission metadata; the registry collects them; agent gate checks via security policy.
 - Run tests with: `uv run pytest` (asyncio_mode=auto).
 - Lint with: `uv run ruff check`.
+
+## Phase 7 scope (DONE — production hardening & operational readiness)
+The final core-hardening phase. NOT a feature-expansion phase. Makes KINETIC
+operationally reliable, observable, configurable, testable, and ready for
+real-world use. All existing architecture and security boundaries preserved.
+
+### Configuration hardening (`src/kinetic/config/settings.py`)
+- `Settings` is now a `pydantic_settings.BaseSettings` with `env_prefix="KINETIC_"`
+  so environment variables override defaults (e.g. `KINETIC_MAX_TURNS=10`).
+- `Settings.from_file(path)` + `load_settings(config_file)` layer env > file >
+  defaults; invalid files raise `ConfigError` (never silent fallback).
+- Comprehensive field validators: non-negative retries (bounded ≤20), positive
+  timeouts (bounded ≤24h), bounded limits (char ≤1M, count ≤10k), bounded
+  weights (sum>0), timeout ordering (default≤max), valid enums (network_policy,
+  runtime_type, permission_mode). Invalid values fail EARLY at construction.
+- Tests: `tests/test_phase7_config.py` (precedence + invalid config).
+
+### Structured logging (`src/kinetic/observability/logging.py`)
+- Centralized JSON structured logging: `configure()`, `get_logger()`,
+  `bind_context()` (session/task/workspace/environment correlation IDs).
+- `_SecretRedactingJsonFormatter` masks credential-like values in messages +
+  extras before emission. Reuses the memory `SecretDetector` for consistency.
+- DISTINCT from `AuditLog`: logging = operational diagnostics; audit = security
+  accountability. Audit info is never duplicated into normal logs.
+- Tests: `tests/test_phase7_logging.py` (secret fixtures never appear).
+
+### Metrics (`src/kinetic/observability/metrics.py`)
+- `MetricsCollector` with Counters, Gauges, Timers — bounded (max_metrics cap
+  drops new names; timer samples bounded). Thread-safe. Snapshotable.
+- Standard metric names: tasks started/completed/failed/cancelled, task
+  duration, steps executed, verification attempts, repair attempts, recovery
+  failures, env created/destroyed, tool failures, permission denials.
+- Wired into: TaskManager (task lifecycle), Environment (create/destroy,
+  permission denials), ExecutionController (steps, verification, repair).
+  AgentSession + Orchestrator propagate the collector.
+- Tests: `tests/test_phase7_metrics.py`.
+
+### EventBus hardening (`src/kinetic/events/bus.py`)
+- Bounded subscriber queues (maxsize); slow consumers drop oldest (publisher
+  never blocks). Subscriber failure (closed loop) → subscriber dropped, never
+  crashes producer.
+- Bounded payloads: oversized `data` truncated with marker; non-JSON-serializable
+  values replaced with repr; secrets masked before publication.
+- Tests: `tests/test_phase7_events.py` (stress, slow/cancelled/failed consumer,
+  concurrent publishers, payload safety).
+
+### Graceful shutdown (`src/kinetic/lifecycle.py`)
+- `ShutdownCoordinator`: registers named cleanup callbacks (async/sync), runs
+  them LIFO within a bounded timeout. Timed-out callbacks abandoned; failed
+  callbacks recorded but don't stop others. Cancellation distinct from failure.
+- `install_signal_handlers()`: wires SIGINT/SIGTERM to a CancellationToken
+  (main thread only; never an import side effect).
+- Tests: `tests/test_phase7_lifecycle.py`.
+
+### Environment diagnostics (`src/kinetic/environment/diagnostics.py`)
+- `list_managed_containers()`, `find_stale_containers()`: read-only inspection
+  of `kinetic.managed=true` labeled containers. NEVER destroys automatically.
+- `destroy_container(id)`: explicit, label-gated (refuses non-managed).
+- Tests: `tests/test_phase7_diagnostics.py` (fakes; Docker unavailable).
+
+### Security audit
+- Grep-verified: no `os.system`, no `shell=True` in subprocess, no `eval()`,
+  no `exec()` builtin, no `pickle.load`, no unsafe `yaml.load`.
+- Single execution path confirmed: Agent → AgentSession → PermissionPolicy →
+  ToolRegistry → Tool → Environment → Runtime. No alternate unrestricted path.
+- Tests: `tests/test_phase7_security.py` (pattern grep + permission + path safety).
+
+### Additional hardening
+- Resource limits: every untrusted quantity bounded (`test_phase7_resource_limits.py`).
+- Git/workspace safety: symlink/traversal/absolute-path regression tests
+  (`test_phase7_git_safety.py`).
+- Memory/context: corrupt SQLite, bounded retrieval, deterministic embeddings
+  (`test_phase7_memory.py`).
+- Task state/checkpoint: exhaustive transition matrix, corrupt-checkpoint
+  fail-closed, version/ID integrity (`test_phase7_task_state.py`).
+- Failure containment: subscriber/task/tool/env failure isolation
+  (`test_phase7_failure_containment.py`).
+- CLI: exit codes, no tracebacks for expected errors, dry-run without key
+  (`test_phase7_cli.py`).
+- End-to-end fake integration: full scenario (workspace → project → task →
+  plan → execute → verify → failure → repair → re-verify → review → commit →
+  checkpoint → complete → metrics/events/audit/no-secrets/working-tree)
+  (`test_phase7_e2e.py`).
+- Stress: EventBus, memory, context, state transitions, large output, checkpoints
+  (`test_phase7_stress.py`).
+- Live SDK integration: optional test gated on `ANTHROPIC_API_KEY`
+  (`test_phase7_live_sdk.py`); skips cleanly without key.
+- Packaging: wheel builds, installs in clean venv, CLI entrypoint works.
+
+725 tests pass (485 prior + 240 new Phase 7). 16 skipped (12 docker + 4 live
+SDK without key). Ruff clean. No secrets committed.
