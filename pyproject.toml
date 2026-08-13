@@ -30,7 +30,7 @@ dev = [
 kinetic = "kinetic.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/kinetic"]
+packages = ["kinetic"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

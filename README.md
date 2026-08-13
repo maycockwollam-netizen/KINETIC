@@ -28,7 +28,7 @@ There is exactly one safe execution path. Security is enforced at the runtime/to
 
 ## Layout
 
-    src/kinetic/
+    kinetic/
         agent/          Claude Agent SDK adapter + agent sessions
         cli/            CLI entrypoint (run, task status/cancel/resume/inspect/failures/verify)
         config/         layered configuration (env vars > config file > defaults)

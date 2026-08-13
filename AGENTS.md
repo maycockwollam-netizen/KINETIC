@@ -127,7 +127,7 @@ daemon available (skipped otherwise). Ruff clean. Commit d93323c.
 ## Phase 4 scope (DONE)
 Memory & Context Engine. Selective hybrid-retrieval memory system — NOT a raw
 conversation dump. Only validated facts become persistent memory.
-- `src/kinetic/memory/`: models (MemoryRecord, MemoryScope EPHEMERAL/TASK/
+- `kinetic/memory/`: models (MemoryRecord, MemoryScope EPHEMERAL/TASK/
   PROJECT/AGENT, compute_content_hash), embeddings (EmbeddingProvider ABC +
   DeterministicEmbeddingProvider — hashing-trick, local, no network/API key),
   metadata (MemoryFilter with project isolation + SecretDetector), store
@@ -141,7 +141,7 @@ conversation dump. Only validated facts become persistent memory.
   delete/retrieve/search/invalidate/scope/consolidate; secret-filtered;
   dedup via content_hash; invalidation-preferred over delete; failure-safe),
   providers/ (extension point).
-- `src/kinetic/context/`: ContextBudget (max memory items/chars/project
+- `kinetic/context/`: ContextBudget (max memory items/chars/project
   metadata/recent events/task history), ContextEngine (assembles bounded
   package: task + relevant memories + project metadata + workspace state +
   recent events + task history; ranks/trims to budget; records omissions;
@@ -191,7 +191,7 @@ The Claude Agent SDK remains responsible for model interaction; KINETIC owns
 task lifecycle, planning state, execution state, observation, verification,
 bounded recovery, checkpoints. NO second agent loop / ToolRegistry /
 permission system / direct subprocess outside Environment.
-- `src/kinetic/tasks/`: states (TaskState machine: CREATED→CONTEXT_READY→
+- `kinetic/tasks/`: states (TaskState machine: CREATED→CONTEXT_READY→
   PLANNING→PLAN_READY→EXECUTING→VERIFYING→COMPLETED/FAILED/CANCELLED +
   RECOVERING; invalid transitions raise TaskStateError), models (Task/Plan/
   PlanStep/StepStatus/TaskFailure — small, no raw model output), manager
@@ -274,7 +274,7 @@ better at completing real coding tasks *after* the Phase 5 orchestration layer
 has planned and executed work. Flow: Task → Plan → Execute → Observe → Verify →
 Failure analysis → Locate cause → Repair → Retest → Regression verification →
 Diff/quality review → Complete OR bounded failure.
-- `src/kinetic/intelligence/` package:
+- `kinetic/intelligence/` package:
   - `models.py`: FailureAnalysis (bounded+secret-masked), TestFailureInfo,
     ChangeRecord, ChangeAnalysis, RepairAttempt, RepairState, StuckSignal,
     RegressionResult, ReviewCheck, ReviewResult.
@@ -392,7 +392,7 @@ Verified & fixed only security/correctness/reliability/integration issues:
 195 tests pass (175 prior + 10 docker + 10 new hardening). Ruff clean.
 
 ## Conventions
-- Package import root: `kinetic`. Source under `src/kinetic`.
+- Package import root: `kinetic`. Source under `kinetic/`.
 - Use `pydantic` v2 for structured data/config. Use `anyio` for async (SDK uses anyio).
 - Tools expose permission metadata; the registry collects them; agent gate checks via security policy.
 - Run tests with: `uv run pytest` (asyncio_mode=auto).
@@ -403,7 +403,7 @@ The final core-hardening phase. NOT a feature-expansion phase. Makes KINETIC
 operationally reliable, observable, configurable, testable, and ready for
 real-world use. All existing architecture and security boundaries preserved.
 
-### Configuration hardening (`src/kinetic/config/settings.py`)
+### Configuration hardening (`kinetic/config/settings.py`)
 - `Settings` is now a `pydantic_settings.BaseSettings` with `env_prefix="KINETIC_"`
   so environment variables override defaults (e.g. `KINETIC_MAX_TURNS=10`).
 - `Settings.from_file(path)` + `load_settings(config_file)` layer env > file >
@@ -414,7 +414,7 @@ real-world use. All existing architecture and security boundaries preserved.
   runtime_type, permission_mode). Invalid values fail EARLY at construction.
 - Tests: `tests/test_phase7_config.py` (precedence + invalid config).
 
-### Structured logging (`src/kinetic/observability/logging.py`)
+### Structured logging (`kinetic/observability/logging.py`)
 - Centralized JSON structured logging: `configure()`, `get_logger()`,
   `bind_context()` (session/task/workspace/environment correlation IDs).
 - `_SecretRedactingJsonFormatter` masks credential-like values in messages +
@@ -423,7 +423,7 @@ real-world use. All existing architecture and security boundaries preserved.
   accountability. Audit info is never duplicated into normal logs.
 - Tests: `tests/test_phase7_logging.py` (secret fixtures never appear).
 
-### Metrics (`src/kinetic/observability/metrics.py`)
+### Metrics (`kinetic/observability/metrics.py`)
 - `MetricsCollector` with Counters, Gauges, Timers — bounded (max_metrics cap
   drops new names; timer samples bounded). Thread-safe. Snapshotable.
 - Standard metric names: tasks started/completed/failed/cancelled, task
@@ -434,7 +434,7 @@ real-world use. All existing architecture and security boundaries preserved.
   AgentSession + Orchestrator propagate the collector.
 - Tests: `tests/test_phase7_metrics.py`.
 
-### EventBus hardening (`src/kinetic/events/bus.py`)
+### EventBus hardening (`kinetic/events/bus.py`)
 - Bounded subscriber queues (maxsize); slow consumers drop oldest (publisher
   never blocks). Subscriber failure (closed loop) → subscriber dropped, never
   crashes producer.
@@ -443,7 +443,7 @@ real-world use. All existing architecture and security boundaries preserved.
 - Tests: `tests/test_phase7_events.py` (stress, slow/cancelled/failed consumer,
   concurrent publishers, payload safety).
 
-### Graceful shutdown (`src/kinetic/lifecycle.py`)
+### Graceful shutdown (`kinetic/lifecycle.py`)
 - `ShutdownCoordinator`: registers named cleanup callbacks (async/sync), runs
   them LIFO within a bounded timeout. Timed-out callbacks abandoned; failed
   callbacks recorded but don't stop others. Cancellation distinct from failure.
@@ -451,7 +451,7 @@ real-world use. All existing architecture and security boundaries preserved.
   (main thread only; never an import side effect).
 - Tests: `tests/test_phase7_lifecycle.py`.
 
-### Environment diagnostics (`src/kinetic/environment/diagnostics.py`)
+### Environment diagnostics (`kinetic/environment/diagnostics.py`)
 - `list_managed_containers()`, `find_stale_containers()`: read-only inspection
   of `kinetic.managed=true` labeled containers. NEVER destroys automatically.
 - `destroy_container(id)`: explicit, label-gated (refuses non-managed).
