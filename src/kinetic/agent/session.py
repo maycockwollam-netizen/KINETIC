@@ -274,6 +274,71 @@ class AgentSession:
             self.events.emit(EventType.AGENT_ERROR, self.session_id, action="context_build", reason=str(exc))
             return None
 
+    async def prepare(self) -> None:
+        """Assemble context, build the adapter, and provision the environment.
+
+        Factored out of :meth:`run` so the Phase 5 execution controller can
+        provision once and issue many ``query`` calls (one per plan step)
+        against a single agent session. The environment is provisioned here and
+        torn down by :meth:`finish`.
+
+        Adapters may expose either an explicit ``connect`` coroutine or the
+        async-context-manager protocol (``__aenter__``/``__aexit__``); both are
+        supported so legacy test adapters keep working.
+        """
+        context_block = await self._assemble_context()
+        base_prompt = self.cfg.system_prompt
+        if context_block:
+            self.cfg.system_prompt = (
+                (base_prompt + "\n\n" if base_prompt else "") + context_block
+            )
+        else:
+            self.cfg.system_prompt = base_prompt
+        self._adapter = self._adapter or self.build_adapter()
+        await self.environment.provision()
+        await self._connect_adapter()
+
+    async def _connect_adapter(self) -> None:
+        adapter = self._adapter
+        if adapter is None:
+            return
+        if hasattr(adapter, "connect"):
+            await adapter.connect()
+        elif hasattr(adapter, "__aenter__"):
+            await adapter.__aenter__()
+
+    async def _disconnect_adapter(self) -> None:
+        adapter = self._adapter
+        if adapter is None:
+            return
+        if hasattr(adapter, "disconnect"):
+            try:
+                await adapter.disconnect()
+            except Exception as exc:  # noqa: BLE001
+                self.events.emit(EventType.AGENT_ERROR, self.session_id, action="disconnect", reason=str(exc))
+        elif hasattr(adapter, "__aexit__"):
+            try:
+                await adapter.__aexit__(None, None, None)
+            except Exception as exc:  # noqa: BLE001
+                self.events.emit(EventType.AGENT_ERROR, self.session_id, action="disconnect", reason=str(exc))
+
+    async def query(self, prompt: str) -> Any:
+        """Run one prompt against the connected adapter and return the result.
+
+        The model owns the reasoning loop; this is a thin pass-through to the
+        SDK adapter. Used by both the one-shot :meth:`run` and the Phase 5
+        execution controller (one call per plan step).
+        """
+        if self._adapter is None:
+            await self.prepare()
+        assert self._adapter is not None
+        return await self._adapter.query(prompt, session_id=self.session_id)
+
+    async def finish(self) -> None:
+        """Disconnect the adapter and tear down the environment (always)."""
+        await self._disconnect_adapter()
+        await self._teardown_environment()
+
     async def run(self) -> SessionResult:
         """Connect, run the prompt, disconnect, and return the outcome.
 
@@ -286,60 +351,36 @@ class AgentSession:
         gracefully (base prompt only) and never block the task or fabricate
         memories. Assistant responses are NOT auto-persisted as memory.
         """
-        # Assemble context first (failure-safe), then (re)build the adapter so
-        # the system prompt reflects it.
-        context_block = await self._assemble_context()
-        base_prompt = self.cfg.system_prompt
-        if context_block:
-            self.cfg.system_prompt = (
-                (base_prompt + "\n\n" if base_prompt else "") + context_block
-            )
-        else:
-            self.cfg.system_prompt = base_prompt
-        adapter = self._adapter or self.build_adapter()
-        events_snapshot: list[dict[str, Any]] = []
-        # Provision the sandboxed environment for this run; fail closed if it
-        # cannot be brought up (e.g. docker unavailable with docker requested).
+        result: Any = None
         try:
-            await self.environment.provision()
+            await self.prepare()
         except Exception as exc:  # noqa: BLE001
-            await self._teardown_environment()
+            await self.finish()
             return SessionResult(
                 session_id=self.session_id,
                 success=False,
                 error=f"environment provisioning failed: {exc}",
                 events=[e.to_dict() for e in self.events.history],
             )
-        result: Any = None
         try:
-            sub = await self.events.subscribe()
             try:
-                try:
-                    async with adapter:
-                        result = await adapter.query(self.cfg.prompt, session_id=self.session_id)
-                except Exception as exc:  # noqa: BLE001
-                    return SessionResult(
-                        session_id=self.session_id,
-                        success=False,
-                        error=str(exc),
-                        events=[e.to_dict() for e in self.events.history],
-                    )
-                # Drain remaining events.
-                async for ev in sub:
-                    events_snapshot.append(ev.to_dict())
-                    break  # only peek one post-run; full history below
-            finally:
-                sub.close()
-            events_snapshot = [e.to_dict() for e in self.events.history]
+                result = await self.query(self.cfg.prompt)
+            except Exception as exc:  # noqa: BLE001
+                return SessionResult(
+                    session_id=self.session_id,
+                    success=False,
+                    error=str(exc),
+                    events=[e.to_dict() for e in self.events.history],
+                )
             success = bool(result and not getattr(result, "is_error", False))
             result_text = getattr(result, "result", None) if result else None
         finally:
-            await self._teardown_environment()
+            await self.finish()
         return SessionResult(
             session_id=self.session_id,
             success=success,
             result_text=result_text,
-            events=events_snapshot,
+            events=[e.to_dict() for e in self.events.history],
         )
 
     async def _teardown_environment(self) -> None:

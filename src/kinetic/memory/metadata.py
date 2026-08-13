@@ -88,6 +88,8 @@ class SecretMatch:
     kind: str
     pattern: str
     snippet: str
+    #: The original matched substring (used for redaction in observations).
+    original: str = ""
 
 
 class SecretDetector:
@@ -105,7 +107,7 @@ class SecretDetector:
                 snippet = m.group(0)
                 # Mask the matched value in the recorded snippet.
                 masked = snippet[:4] + "***" if len(snippet) > 8 else "***"
-                matches.append(SecretMatch(kind=kind, pattern=pattern.pattern, snippet=masked))
+                matches.append(SecretMatch(kind=kind, pattern=pattern.pattern, snippet=masked, original=snippet))
         return matches
 
     def contains_secret(self, text: str) -> bool:

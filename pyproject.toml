@@ -36,6 +36,12 @@ packages = ["src/kinetic"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    # SDK warning about allowed_tools auto-approving tools (pre-existing Phase 1
+    # behavior; not a Phase 5 concern). The can_use_tool gate still runs for
+    # tools that are not blanket-allowed.
+    'ignore:can_use_tool will not be invoked:UserWarning',
+]
 
 [tool.ruff]
 line-length = 100

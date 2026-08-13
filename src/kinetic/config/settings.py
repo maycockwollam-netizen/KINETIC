@@ -88,7 +88,23 @@ class Settings(BaseModel):
     allow_memory_write: bool = False
     allow_memory_delete: bool = False
 
-    @field_validator("workspace_root", "session_root", "audit_log_path", "memory_db_path", mode="after")
+    # --- Phase 5: task orchestration -------------------------------------
+    max_step_attempts: int = 2
+    max_task_attempts: int = 3
+    max_replans: int = 1
+    max_plan_steps: int = 12
+    max_plan_dependencies: int = 8
+    verification_command: str | None = None
+    observation_max_stdout_chars: int = 4000
+    observation_max_stderr_chars: int = 2000
+    checkpoint_dir: Path = Field(default_factory=lambda: Path.home() / ".kinetic" / "checkpoints")
+    enable_checkpoints: bool = True
+    enable_memory_capture: bool = False
+
+    @field_validator(
+        "workspace_root", "session_root", "audit_log_path", "memory_db_path",
+        "checkpoint_dir", mode="after",
+    )
     @classmethod
     def _abs(cls, v: Path) -> Path:
         return v.expanduser().resolve()
@@ -135,7 +151,7 @@ class Settings(BaseModel):
         )
 
     def ensure_directories(self) -> None:
-        for p in (self.workspace_root, self.session_root):
+        for p in (self.workspace_root, self.session_root, self.checkpoint_dir):
             p.mkdir(parents=True, exist_ok=True)
         self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
         self.memory_db_path.parent.mkdir(parents=True, exist_ok=True)

@@ -56,6 +56,22 @@ class EventType(StrEnum):
     MEMORY_CONSOLIDATED = "memory_consolidated"
     CONTEXT_BUILT = "context_built"
     CONTEXT_BUDGET_EXCEEDED = "context_budget_exceeded"
+    # Phase 5 — task planning & execution orchestration
+    TASK_CREATED = "task_created"
+    TASK_STATE_CHANGED = "task_state_changed"
+    TASK_PLANNING_STARTED = "task_planning_started"
+    TASK_PLAN_CREATED = "task_plan_created"
+    TASK_STEP_STARTED = "task_step_started"
+    TASK_STEP_COMPLETED = "task_step_completed"
+    TASK_STEP_FAILED = "task_step_failed"
+    TASK_VERIFICATION_STARTED = "task_verification_started"
+    TASK_VERIFICATION_COMPLETED = "task_verification_completed"
+    TASK_RECOVERY_STARTED = "task_recovery_started"
+    TASK_RECOVERY_COMPLETED = "task_recovery_completed"
+    TASK_REPLANNED = "task_replanned"
+    TASK_CANCELLED = "task_cancelled"
+    TASK_FAILED = "task_failed"
+    TASK_CHECKPOINT_CREATED = "task_checkpoint_created"
 
 
 @dataclass

@@ -115,3 +115,37 @@ class MemorySecurityError(MemoryError):
 
 class ContextError(KINETICError):
     """The context engine failed to assemble a context package."""
+
+
+# Phase 5 — task planning & execution orchestration
+class TaskError(KINETICError):
+    """The task orchestration subsystem failed."""
+
+
+class TaskStateError(TaskError):
+    """An invalid task state transition was requested."""
+
+    def __init__(self, from_: str, to: str) -> None:
+        self.from_state = from_
+        self.to_state = to
+        super().__init__(f"invalid task state transition: {from_} -> {to}")
+
+
+class PlanError(TaskError):
+    """A plan is missing, malformed, or failed validation."""
+
+    def __init__(self, message: str, *, reason: str | None = None) -> None:
+        self.reason = reason
+        super().__init__(message)
+
+
+class VerificationError(TaskError):
+    """The verification subsystem failed (not a test failure — an internal error)."""
+
+
+class CheckpointError(TaskError):
+    """A checkpoint is missing, corrupted, or cannot be safely restored."""
+
+
+class OrchestrationError(TaskError):
+    """The execution controller could not complete the task."""

@@ -182,7 +182,91 @@ conversation dump. Only validated facts become persistent memory.
   are recorded for relevant-but-cut memories.
 
 ## TODO Phase 5
-Not started. Do NOT implement until Phase 4 is committed & reported.
+Task planning & execution orchestration — DONE (see below).
+
+## Phase 5 scope (DONE)
+Task planning & execution orchestration. Turns KINETIC from an agent
+infrastructure layer into a complete autonomous coding-task execution system.
+The Claude Agent SDK remains responsible for model interaction; KINETIC owns
+task lifecycle, planning state, execution state, observation, verification,
+bounded recovery, checkpoints. NO second agent loop / ToolRegistry /
+permission system / direct subprocess outside Environment.
+- `src/kinetic/tasks/`: states (TaskState machine: CREATED→CONTEXT_READY→
+  PLANNING→PLAN_READY→EXECUTING→VERIFYING→COMPLETED/FAILED/CANCELLED +
+  RECOVERING; invalid transitions raise TaskStateError), models (Task/Plan/
+  PlanStep/StepStatus/TaskFailure — small, no raw model output), manager
+  (TaskManager = authoritative state machine, only writer; cancel distinct
+  from failure; never reinterprets cancellation as failure), planner
+  (validate_plan: unique IDs, unknown/self deps, cycle detection (DFS),
+  bounded size; topological_order (deterministic, tie-broken by plan order);
+  next_executable_step; parse_model_plan — model JSON parsed+validated, never
+  executed blindly), policies (FailureClass, RecoveryPolicy with RetryLimits,
+  classify_failure, VerificationOutcome PASS/FAIL/INCONCLUSIVE), observer
+  (Observation bounded: stdout/stderr truncated + SecretDetector-masked; no
+  chain-of-thought), verifier (Verifier runs commands via Environment.exec →
+  still through permission gate; command_for_manifest from Phase 2
+  ProjectManifest — pytest/npm/cargo/go/make; INCONCLUSIVE when no command,
+  never fakes success), recovery (RecoveryCoordinator: classify→decide→audit;
+  PermissionDenied fails immediately unless state changed; INVALID_PLAN re-plan
+  once; bounded retry; no unlimited retry), checkpoints (CheckpointStore JSON
+  atomic write; build/restore; fail-closed on corruption/terminal-task resume),
+  executor (ExecutionController: single safe path via StepRunner/PlanRunner
+  Protocols — AgentSession.query → adapter → can_use_tool → registry → policy
+  → environment; topo order; verify per-step + final; recover/re-plan/fail;
+  no subprocess/filesystem direct access), orchestrator (Orchestrator wires
+  AgentSession + tasks; AgentStepRunner/AgentPlanRunner back real session;
+  run_task/resume_task provision+finish session in try/finally; catches
+  OrchestrationError/PermissionDeniedError → bounded FAILED outcome, never
+  fabricated success).
+- New errors: TaskError/TaskStateError/PlanError/VerificationError/
+  CheckpointError/OrchestrationError.
+- New events: task_created/state_changed/planning_started/plan_created/
+  step_started/completed/failed/verification_started/completed/recovery_started/
+  completed/replanned/cancelled/failed/checkpoint_created (TASK_COMPLETED/FAILED
+  already existed from Phase 1 — not redefined).
+- Settings: max_step_attempts/max_task_attempts/max_replans/max_plan_steps/
+  max_plan_dependencies/verification_command/observation_*_chars/checkpoint_dir/
+  enable_checkpoints/enable_memory_capture.
+- AgentSession refactor: split run() into prepare()/query()/finish() so the
+  execution controller provisions once and issues many query calls (one per
+  plan step). Adapter connect/disconnect duck-types both connect() and
+  __aenter__/__aexit__ (legacy test adapters keep working). run() unchanged
+  behavior, just factored.
+- CLI: `kinetic task status/cancel/resume <id>` (status/cancel read checkpoint
+  without a live model; resume requires API key).
+- Security: orchestration adds NO new tool path. Verifier routes through
+  Environment.exec (ENVIRONMENT_EXEC enforced at env boundary). Controller has
+  no run_command/subprocess import. PermissionDeniedError propagates as FAILED,
+  never fabricated success. Observations secret-masked before persistence/audit.
+  Memory is NOT auto-persisted (enable_memory_capture flag reserved, off).
+388 tests pass (270 prior + 118 new Phase 5). Ruff clean. No secrets committed.
+
+## Phase 5 gotchas
+- AgentSession.run() was refactored into prepare()/query()/finish(). Tests that
+  inject a fake adapter via `session._adapter = FakeAdapter()` (Phase 3/4) work
+  because prepare() duck-types connect/__aenter__ and finish() duck-types
+  disconnect/__aexit__. Do NOT assume the adapter has connect().
+- TaskState.EXECUTING cannot go directly to COMPLETED — it must pass through
+  VERIFYING (the executor transitions EXECUTING→VERIFYING before final
+  verification). The state machine enforces this.
+- CANCELLED and FAILED are distinct terminals; neither transitions to the other.
+  mark_failed on an already-cancelled task records the failure info WITHOUT
+  changing state (cancellation is never reinterpreted as failure).
+- restore_checkpoint REFUSES terminal tasks (nothing to resume) and validates
+  plan.task_id matches task.id. CLI task status/cancel load raw JSON instead
+  so terminal tasks remain inspectable.
+- FakeStepRunner reuses the last scripted outcome for attempts beyond the
+  scripted list (so a permanently-failing step keeps failing across retries).
+- The SDK emits a CanUseToolShadowedWarning because allowed_tools blanket-
+  auto-approves registered MCP tools (pre-existing Phase 1 behavior). The
+  can_use_tool gate still runs for tools not blanket-allowed; this is filtered
+  in pyproject pytest config, not a Phase 5 concern.
+- Orchestrator.run_task/resume_task catch (OrchestrationError,
+  PermissionDeniedError) and return a bounded FAILED ExecutionOutcome rather
+  than raising — so callers see a structured result, never a fabricated success.
+
+## TODO Phase 6
+Not started. Do NOT implement until Phase 5 is committed & reported.
 
 ## Phase 3 FINAL HARDENING (DONE — security/correctness/reliability only, no new features)
 Verified & fixed only security/correctness/reliability/integration issues:
