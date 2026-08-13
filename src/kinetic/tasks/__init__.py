@@ -25,7 +25,12 @@ NO direct subprocess/filesystem access.
 
 from __future__ import annotations
 
-from kinetic.tasks.checkpoints import CheckpointStore, build_checkpoint, restore_checkpoint
+from kinetic.tasks.checkpoints import (
+    CheckpointStore,
+    build_checkpoint,
+    restore_checkpoint,
+    restore_repair_state,
+)
 from kinetic.tasks.executor import ExecutionController, ExecutionOutcome, PlanRunner, StepRunner
 from kinetic.tasks.manager import TaskManager, default_task_id, workspace_project_id
 from kinetic.tasks.models import Plan, PlanStep, StepStatus, Task, TaskFailure
@@ -85,6 +90,7 @@ __all__ = [
     "parse_model_plan",
     "reset_failed_steps",
     "restore_checkpoint",
+    "restore_repair_state",
     "summarize",
     "topological_order",
     "validate_plan",

@@ -149,3 +149,12 @@ class CheckpointError(TaskError):
 
 class OrchestrationError(TaskError):
     """The execution controller could not complete the task."""
+
+
+# Phase 6 — coding intelligence, verification & recovery
+class IntelligenceError(KINETICError):
+    """The coding-intelligence subsystem failed (analysis, repair, review)."""
+
+
+class RepairError(IntelligenceError):
+    """A bounded repair operation failed."""

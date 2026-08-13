@@ -231,3 +231,153 @@ def task_resume(task_id: str, workspace: str, allow_network: bool, runtime: str 
         click.echo(f"failure: {outcome.failure.message}")
     if outcome.task.state.value not in ("completed",):
         sys.exit(1)
+
+
+# --- Phase 6: coding-intelligence task commands ----------------------------
+
+
+@task.command("inspect")
+@click.argument("task_id")
+@click.option("--workspace", "-w", default=".", help="Project workspace path.")
+def task_inspect(task_id: str, workspace: str) -> None:
+    """Inspect a task's full state including Phase 6 repair/review info.
+
+    Loads the checkpoint without a live model. Shows task state, plan, and any
+    persisted repair state / final review.
+    """
+    from kinetic.config import Settings
+    from kinetic.tasks.checkpoints import CheckpointStore, restore_repair_state
+
+    settings = Settings()
+    store = CheckpointStore(settings.checkpoint_dir)
+    if not store.exists(task_id):
+        click.echo(f"error: no checkpoint for task {task_id}", err=True)
+        sys.exit(1)
+    try:
+        raw = store.load(task_id)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"error: checkpoint corrupt: {exc}", err=True)
+        sys.exit(1)
+    state = _load_orchestrator_state(workspace, task_id)
+    if "error" in state:
+        click.echo(str(state["error"]), err=True)
+        sys.exit(1)
+    click.echo(f"Task: {task_id}")
+    click.echo(f"State: {state['task']['state']}")
+    click.echo(f"Current step: {state['task']['current_step']}")
+    click.echo(f"Attempt count: {state['task']['attempt_count']}")
+    click.echo(f"Replan count: {state['task']['replan_count']}")
+    if state.get("plan_id"):
+        click.echo(f"Plan: {state['plan_id']} ({state['plan_steps']} steps)")
+    try:
+        rs = restore_repair_state(raw)
+    except Exception as exc:  # noqa: BLE001
+        rs = None
+        click.echo(f"(repair state corrupt: {exc})", err=True)
+    if rs:
+        click.echo("Repair state:")
+        click.echo(f"  verification_attempts: {rs.get('verification_attempts', 0)}")
+        click.echo(f"  total_recovery_attempts: {rs.get('total_recovery_attempts', 0)}")
+        click.echo(f"  stuck: {rs.get('stuck')}")
+        click.echo(f"  regression_detected: {rs.get('regression_detected', False)}")
+        attempts = rs.get("attempts", [])
+        click.echo(f"  repair attempts: {len(attempts)}")
+        for a in attempts:
+            status = "success" if a.get("success") else "failed"
+            click.echo(f"    - attempt {a.get('attempt')}: {status}")
+
+
+@task.command("failures")
+@click.argument("task_id")
+def task_failures(task_id: str) -> None:
+    """Show the failure analysis for a task (from its checkpoint)."""
+    from kinetic.config import Settings
+    from kinetic.tasks.checkpoints import CheckpointStore, restore_repair_state
+
+    settings = Settings()
+    store = CheckpointStore(settings.checkpoint_dir)
+    if not store.exists(task_id):
+        click.echo(f"error: no checkpoint for task {task_id}", err=True)
+        sys.exit(1)
+    raw = store.load(task_id)
+    failure = (raw.get("task") or {}).get("failure")
+    if failure:
+        click.echo(f"Task failure class: {failure.get('failure_class')}")
+        click.echo(f"Message: {failure.get('message')}")
+    else:
+        click.echo("No task-level failure recorded.")
+    try:
+        rs = restore_repair_state(raw)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"(repair state corrupt: {exc})", err=True)
+        return
+    if not rs:
+        click.echo("No repair state recorded (Phase 6 repair not engaged).")
+        return
+    for a in rs.get("attempts", []):
+        analysis = a.get("analysis") or {}
+        click.echo(
+            f"attempt {a.get('attempt')}: class={analysis.get('failure_class')} "
+            f"exit_code={analysis.get('exit_code')} "
+            f"failures={analysis.get('failure_count')}"
+        )
+        for tf in (analysis.get("test_failures") or [])[:8]:
+            click.echo(f"  - {tf.get('name')} ({tf.get('file')}:{tf.get('line')})")
+
+
+@task.command("verify")
+@click.argument("task_id")
+@click.option("--workspace", "-w", default=".", help="Project workspace path.")
+@click.option("--allow-network", is_flag=True, default=False, help="Enable network tools.")
+@click.option(
+    "--runtime", type=click.Choice(["local", "docker"]), default=None,
+    help="Execution runtime (default: from settings).",
+)
+def task_verify(task_id: str, workspace: str, allow_network: bool, runtime: str | None) -> None:
+    """Re-run a task's verification command (requires ANTHROPIC_API_KEY).
+
+    Provisions a sandboxed environment and runs the project verification
+    command through the existing safe path. Does NOT call the model; only
+    verifies the current working tree.
+    """
+    _check_api_key()
+    from pathlib import Path as _Path
+
+    import anyio
+
+    from kinetic.agent.session import AgentSession, SessionConfig
+    from kinetic.config import Settings
+    from kinetic.project.scanner import scan_project
+    from kinetic.tasks.verifier import Verifier
+
+    ws = _Path(workspace).resolve()
+    if not ws.exists():
+        click.echo(f"error: workspace not found: {ws}", err=True)
+        sys.exit(1)
+    settings = Settings()
+    settings.ensure_directories()
+    cfg = SessionConfig(workspace=ws, prompt="(verify)", allow_network=allow_network, runtime_type=runtime)
+    session = AgentSession(settings, cfg)
+    manifest = scan_project(ws)
+    verifier = Verifier.from_settings(settings, environment=session.environment, manifest=manifest)
+
+    async def _run() -> None:
+        try:
+            await session.prepare()
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"error: provisioning failed: {exc}", err=True)
+            sys.exit(1)
+        try:
+            result = await verifier.verify()
+            click.echo(f"outcome: {result.outcome.value}")
+            click.echo(f"command: {result.command}")
+            if result.exit_code is not None:
+                click.echo(f"exit_code: {result.exit_code}")
+            if result.reason:
+                click.echo(f"reason: {result.reason}")
+            if result.outcome.value != "pass":
+                sys.exit(1)
+        finally:
+            await session.finish()
+
+    anyio.run(_run)

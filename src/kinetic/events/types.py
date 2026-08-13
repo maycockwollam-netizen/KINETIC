@@ -72,6 +72,16 @@ class EventType(StrEnum):
     TASK_CANCELLED = "task_cancelled"
     TASK_FAILED = "task_failed"
     TASK_CHECKPOINT_CREATED = "task_checkpoint_created"
+    # Phase 6 — coding intelligence, verification & recovery
+    FAILURE_ANALYZED = "failure_analyzed"
+    REPAIR_STARTED = "repair_started"
+    REPAIR_COMPLETED = "repair_completed"
+    REPAIR_FAILED = "repair_failed"
+    VERIFICATION_RETRY = "verification_retry"
+    STUCK_DETECTED = "stuck_detected"
+    REGRESSION_DETECTED = "regression_detected"
+    FINAL_REVIEW_STARTED = "final_review_started"
+    FINAL_REVIEW_COMPLETED = "final_review_completed"
 
 
 @dataclass

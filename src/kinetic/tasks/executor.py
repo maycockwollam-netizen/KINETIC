@@ -38,6 +38,10 @@ from kinetic.tasks.states import REPLAN_SOURCE_STATES, TaskState
 from kinetic.tasks.verifier import VerificationResult, Verifier
 
 if TYPE_CHECKING:
+    from kinetic.intelligence.diff import ChangeAnalyzer
+    from kinetic.intelligence.models import RepairOutcome
+    from kinetic.intelligence.repair import RepairCoordinator
+    from kinetic.intelligence.review import FinalReviewer, ReviewResult
     from kinetic.tasks.checkpoints import CheckpointStore
     from kinetic.tasks.manager import TaskManager
 
@@ -89,6 +93,9 @@ class ExecutionOutcome:
     replans: int = 0
     failure: TaskFailure | None = None
     cancelled: bool = False
+    # Phase 6 — optional repair outcome (None when repair is disabled).
+    repair: RepairOutcome | None = None
+    review: ReviewResult | None = None
 
 
 class ExecutionController:
@@ -120,6 +127,9 @@ class ExecutionController:
         max_plan_steps: int = 12,
         max_plan_deps: int = 8,
         session_id: str = "tasks",
+        repair_coordinator: RepairCoordinator | None = None,
+        change_analyzer: ChangeAnalyzer | None = None,
+        final_reviewer: FinalReviewer | None = None,
     ) -> None:
         self.manager = manager
         self.runner = runner
@@ -135,6 +145,11 @@ class ExecutionController:
         self.max_plan_steps = max_plan_steps
         self.max_plan_deps = max_plan_deps
         self.session_id = session_id
+        # Phase 6 — optional coding-intelligence components. When absent,
+        # behavior is identical to Phase 5 (no repair, no final review).
+        self.repair_coordinator = repair_coordinator
+        self.change_analyzer = change_analyzer
+        self.final_reviewer = final_reviewer
 
     # --- top-level orchestration ------------------------------------------
 
@@ -166,6 +181,9 @@ class ExecutionController:
 
         observations: list[Observation] = []
         replans = 0
+        final: VerificationResult | None = None
+        repair_outcome: RepairOutcome | None = None
+        review: ReviewResult | None = None
         try:
             while not plan.all_done():
                 if self.manager.load(task_id).cancelled:
@@ -187,14 +205,48 @@ class ExecutionController:
             self.manager.transition(task_id, TaskState.VERIFYING, reason="final verification")
             final = await self._verify_task(task, plan, observations)
             if final.outcome is VerificationOutcome.PASS:
-                self.manager.mark_completed(task_id)
+                # Phase 6: bounded repair was not needed; run the final review.
+                review = await self._final_review(task, plan, observations, final)
+                if review is not None and not review.passed:
+                    failure = TaskFailure(
+                        failure_class=FailureClass.UNKNOWN.value,
+                        message=f"final review failed: {review.reason}",
+                    )
+                    self.manager.mark_failed(task_id, failure=failure)
+                else:
+                    self.manager.mark_completed(task_id)
             elif final.outcome is VerificationOutcome.FAIL:
-                failure = TaskFailure(
-                    failure_class=FailureClass.TEST_FAILURE.value,
-                    message=f"final verification failed: {final.reason}",
-                    observation_summary=final.stderr or final.reason,
-                )
-                self.manager.mark_failed(task_id, failure=failure)
+                # Phase 6: attempt a bounded repair before declaring failure.
+                repaired = await self._attempt_repair(task, plan, observations, final)
+                repair_outcome = repaired
+                if repaired is not None and repaired.success:
+                    # Re-run final verification after a successful repair.
+                    final = await self._verify_task(task, plan, observations)
+                    review = await self._final_review(task, plan, observations, final)
+                    if final.outcome is VerificationOutcome.PASS and (
+                        review is None or review.passed
+                    ):
+                        self.manager.mark_completed(task_id)
+                    else:
+                        failure = TaskFailure(
+                            failure_class=FailureClass.TEST_FAILURE.value,
+                            message=f"verification still failing after repair: {final.reason}",
+                            observation_summary=final.stderr or final.reason,
+                        )
+                        self.manager.mark_failed(task_id, failure=failure)
+                else:
+                    reason = repaired.reason if repaired else final.reason
+                    fclass = (
+                        repaired.final_analysis.failure_class.value
+                        if repaired and repaired.final_analysis
+                        else FailureClass.TEST_FAILURE.value
+                    )
+                    failure = TaskFailure(
+                        failure_class=fclass,
+                        message=f"final verification failed: {reason}",
+                        observation_summary=final.stderr or reason,
+                    )
+                    self.manager.mark_failed(task_id, failure=failure)
             else:
                 # Inconclusive: do NOT pretend success. Mark completed only if
                 # all steps succeeded and there was no explicit failure signal;
@@ -207,6 +259,11 @@ class ExecutionController:
                         message="verification inconclusive and not all steps succeeded",
                     )
                     self.manager.mark_failed(task_id, failure=failure)
+            # Persist a final checkpoint including Phase 6 repair state.
+            if self.enable_checkpoints:
+                rs = repair_outcome.state.to_dict() if repair_outcome else None
+                self._checkpoint(task, plan, observations[-1] if observations else Observation(step_id=""),
+                                 observations, repair_state=rs)
         except OrchestrationError:
             raise
         return ExecutionOutcome(
@@ -216,6 +273,8 @@ class ExecutionController:
             final_verification=final,
             replans=replans,
             failure=self.manager.load(task_id).failure,
+            repair=repair_outcome,
+            review=review,
         )
 
     # --- step execution ----------------------------------------------------
@@ -437,6 +496,56 @@ class ExecutionController:
         )
         return result
 
+    async def _attempt_repair(
+        self, task: Task, plan: Plan, observations: list[Observation],
+        failed: VerificationResult,
+    ) -> RepairOutcome | None:
+        """Phase 6: run the bounded repair loop if a coordinator is configured.
+
+        Returns ``None`` when repair is disabled (Phase 5 behavior). The repair
+        loop uses the SAME safe path (``AgentSession.query`` via the repair
+        runner) and re-verifies through ``Environment.exec`` — no new execution
+        path.
+        """
+        if self.repair_coordinator is None:
+            return None
+        return await self.repair_coordinator.repair(
+            failed_verification=failed,
+            task_request=task.user_request,
+            plan_goal=plan.goal,
+            step_id=None,
+            workspace=task.workspace,
+            project_id=task.project_id or "",
+        )
+
+    async def _final_review(
+        self, task: Task, plan: Plan, observations: list[Observation],
+        verification: VerificationResult | None,
+    ) -> ReviewResult | None:
+        """Phase 6: deterministic final review if a reviewer is configured.
+
+        Fetches the change analysis through the existing Git tools (via the
+        change analyzer's inspector) — no direct subprocess.
+        """
+        if self.final_reviewer is None:
+            return None
+        change = None
+        if self.change_analyzer is not None:
+            try:
+                change = await self.change_analyzer.analyze()
+            except Exception as exc:  # noqa: BLE001 - degrade, never block completion
+                self.events.emit(
+                    EventType.AGENT_ERROR, self.session_id,
+                    action="final_review_change_analysis", reason=str(exc),
+                )
+        if change is None:
+            from kinetic.intelligence.models import ChangeAnalysis
+
+            change = ChangeAnalysis()
+        return self.final_reviewer.review(
+            change=change, verification=verification, workspace_valid=True, changes_expected=True,
+        )
+
     def _recover_blocked(self, task: Task, plan: Plan, observations: list[Observation]) -> bool:
         """No executable step but not all done — attempt a reset/re-plan once."""
         if not plan.steps:
@@ -445,7 +554,8 @@ class ExecutionController:
         return next_executable_step(plan) is not None
 
     def _checkpoint(
-        self, task: Task, plan: Plan, latest: Observation, observations: list[Observation]
+        self, task: Task, plan: Plan, latest: Observation, observations: list[Observation],
+        repair_state: dict[str, Any] | None = None,
     ) -> None:
         if not self.enable_checkpoints:
             return
@@ -454,6 +564,7 @@ class ExecutionController:
                 task, plan,
                 observations=[o.to_dict() for o in observations],
                 completed_step_ids=plan.completed_step_ids(),
+                repair_state=repair_state,
             )
             self.manager.snapshot(task.id, ckpt)
         except Exception as exc:  # noqa: BLE001 - checkpoint is best-effort

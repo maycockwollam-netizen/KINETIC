@@ -15,15 +15,26 @@ from kinetic.errors import PlanError
 
 
 class FailureClass(StrEnum):
-    """How a failure is classified — drives the retry decision."""
+    """How a failure is classified — drives the retry decision.
+
+    Phase 6 extends the set with coding-intelligence-specific classes
+    (lint/type-check, dependency, command, cancellation, verification
+    inconclusive). Existing members are unchanged so Phase 1–5 callers keep
+    working.
+    """
 
     TOOL_FAILURE = "tool_failure"
     TEST_FAILURE = "test_failure"
     BUILD_FAILURE = "build_failure"
+    LINT_FAILURE = "lint_failure"
+    DEPENDENCY_FAILURE = "dependency_failure"
+    COMMAND_FAILURE = "command_failure"
     TIMEOUT = "timeout"
+    CANCELLATION = "cancellation"
     PERMISSION_DENIED = "permission_denied"
     ENVIRONMENT_FAILURE = "environment_failure"
     INVALID_PLAN = "invalid_plan"
+    VERIFICATION_INCONCLUSIVE = "verification_inconclusive"
     UNKNOWN = "unknown"
 
 
@@ -33,9 +44,10 @@ class VerificationOutcome(StrEnum):
     INCONCLUSIVE = "inconclusive"
 
 
-# Classes that should NOT be retried (deterministic security/permission failures).
+# Classes that should NOT be retried (deterministic security/permission failures,
+# and cancellations which are terminal-by-intent).
 NON_RETRYABLE: frozenset[FailureClass] = frozenset(
-    {FailureClass.PERMISSION_DENIED, FailureClass.INVALID_PLAN}
+    {FailureClass.PERMISSION_DENIED, FailureClass.INVALID_PLAN, FailureClass.CANCELLATION}
 )
 # Classes that may benefit from re-planning rather than blind retry.
 REPLAN_CANDIDATES: frozenset[FailureClass] = frozenset(
@@ -78,6 +90,13 @@ class RecoveryPolicy:
         replans: int,
         permission_state_changed: bool = False,
     ) -> RecoveryDecision:
+        # Cancellation is terminal-by-intent: never retry or re-plan.
+        if failure_class is FailureClass.CANCELLATION:
+            return RecoveryDecision(
+                retry=False, replan=False, fail=True,
+                reason="task was cancelled; not retrying",
+                failure_class=failure_class,
+            )
         # Permission failures: fail unless the permission state changed.
         if failure_class is FailureClass.PERMISSION_DENIED:
             if permission_state_changed and step_attempts < self.limits.max_step_attempts:

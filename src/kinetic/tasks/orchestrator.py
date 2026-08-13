@@ -18,6 +18,12 @@ from typing import TYPE_CHECKING, Any
 
 from kinetic.errors import OrchestrationError, PlanError
 from kinetic.events import EventBus, EventType
+from kinetic.intelligence.analyzer import FailureAnalyzer
+from kinetic.intelligence.diff import ChangeAnalyzer, GitToolsInspector
+from kinetic.intelligence.regression import RegressionChecker
+from kinetic.intelligence.repair import RepairContextBuilder, RepairCoordinator, RepairRunner
+from kinetic.intelligence.review import FinalReviewer
+from kinetic.intelligence.stuck import StuckDetector
 from kinetic.security import AuditLog
 from kinetic.tasks.executor import ExecutionController, ExecutionOutcome, PlanRunner, StepRunner
 from kinetic.tasks.manager import TaskManager
@@ -75,6 +81,40 @@ class AgentStepRunner:
             "errors": [] if not is_error else [result_text or "agent error"],
             "success": not is_error,
             "tool_calls": tool_calls,
+            "duration_ms": int(getattr(result, "duration_ms", 0) or 0),
+        }
+
+
+class AgentRepairRunner:
+    """A :class:`RepairRunner` backed by an :class:`AgentSession`.
+
+    This is the SAME safe path as :class:`AgentStepRunner` — one
+    ``AgentSession.query`` call per repair attempt. The SDK owns the reasoning
+    loop; KINETIC only captures the bounded result. There is no second agent
+    loop here.
+    """
+
+    def __init__(self, session: AgentSession) -> None:
+        self._session = session
+
+    async def repair(self, *, prompt: str, session_id: str) -> dict[str, Any]:
+        try:
+            result = await self._session.query(prompt)
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "result_text": None,
+                "exit_code": 1,
+                "errors": [str(exc)],
+                "success": False,
+                "duration_ms": 0,
+            }
+        is_error = bool(getattr(result, "is_error", False))
+        result_text = getattr(result, "result", None)
+        return {
+            "result_text": result_text,
+            "exit_code": 0 if not is_error else 1,
+            "errors": [] if not is_error else [result_text or "agent error"],
+            "success": not is_error,
             "duration_ms": int(getattr(result, "duration_ms", 0) or 0),
         }
 
@@ -183,6 +223,10 @@ class Orchestrator:
         self._plan_runner = plan_runner or AgentPlanRunner(
             session, max_steps=settings.max_plan_steps, max_deps=settings.max_plan_dependencies,
         )
+        # Phase 6 — coding-intelligence components (built only when enabled).
+        self.repair_coordinator, self.change_analyzer, self.final_reviewer = self._build_intelligence(
+            session, settings, manifest
+        )
         self.controller = ExecutionController(
             manager=self.manager,
             runner=self._step_runner,
@@ -198,7 +242,76 @@ class Orchestrator:
             max_plan_steps=settings.max_plan_steps,
             max_plan_deps=settings.max_plan_dependencies,
             session_id=session.session_id,
+            repair_coordinator=self.repair_coordinator,
+            change_analyzer=self.change_analyzer,
+            final_reviewer=self.final_reviewer,
         )
+
+    def _build_intelligence(
+        self, session: AgentSession, settings: Settings, manifest: ProjectManifest | None
+    ) -> tuple[RepairCoordinator | None, ChangeAnalyzer | None, FinalReviewer | None]:
+        """Build the Phase 6 coding-intelligence components from settings.
+
+        Returns ``(None, None, None)`` when repair is disabled, preserving
+        Phase 5 behavior. When enabled, the repair coordinator reuses the SAME
+        ``AgentSession.query`` safe path and the verifier's ``Environment.exec``
+        path — no new execution path is introduced.
+        """
+        if not getattr(settings, "enable_repair", False):
+            # Repair disabled: only the final reviewer may be engaged, and only
+            # if explicitly enabled — this preserves Phase 5 behavior by default.
+            review = FinalReviewer(events=self.events, session_id=session.session_id) if getattr(
+                settings, "enable_final_review", False
+            ) else None
+            return None, None, review
+        analyzer = FailureAnalyzer.from_settings(
+            settings, events=self.events, audit=self.audit, session_id=session.session_id,
+        )
+        context_builder = RepairContextBuilder.from_settings(settings)
+        stuck_detector = StuckDetector(
+            events=self.events, session_id=session.session_id,
+        )
+        regression_checker = RegressionChecker(
+            verifier=self.verifier, events=self.events, session_id=session.session_id,
+        ) if getattr(settings, "enable_regression_check", True) else None
+        # Change analyzer backed by the existing GitTools (permission-gated).
+        from kinetic.tools.git import GitTools
+
+        git = GitTools(
+            workspace=session.cfg.workspace,
+            policy=session.policy,
+            audit=self.audit,
+            events=self.events,
+            session_id=session.session_id,
+            default_timeout=settings.default_command_timeout,
+            max_timeout=settings.max_command_timeout,
+        )
+        change_analyzer = ChangeAnalyzer(
+            inspector=GitToolsInspector(git),
+            workspace=session.cfg.workspace,
+            broad_threshold=settings.diff_broad_change_threshold,
+            max_changed=settings.diff_max_changed_files,
+            events=self.events,
+            session_id=session.session_id,
+        )
+        repair_runner: RepairRunner = AgentRepairRunner(session)
+        repair_coordinator = RepairCoordinator(
+            runner=repair_runner,
+            analyzer=analyzer,
+            verifier=self.verifier,
+            context_builder=context_builder,
+            stuck_detector=stuck_detector,
+            regression_checker=regression_checker,
+            change_analyzer=change_analyzer,
+            max_repair_attempts=settings.max_repair_attempts,
+            max_verification_attempts=settings.max_verification_attempts,
+            events=self.events,
+            audit=self.audit,
+            session_id=session.session_id,
+        )
+        # The final review is always engaged when repair is enabled.
+        review = FinalReviewer(events=self.events, session_id=session.session_id)
+        return repair_coordinator, change_analyzer, review
 
     def _build_store(self):
         from kinetic.tasks.checkpoints import CheckpointStore
@@ -326,6 +439,7 @@ class Orchestrator:
 
 __all__ = [
     "AgentPlanRunner",
+    "AgentRepairRunner",
     "AgentStepRunner",
     "Orchestrator",
 ]

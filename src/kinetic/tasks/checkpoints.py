@@ -72,15 +72,23 @@ def build_checkpoint(
     *,
     observations: list[dict[str, Any]] | None = None,
     completed_step_ids: list[str] | None = None,
+    repair_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a serializable checkpoint from a task + plan + observations."""
+    """Build a serializable checkpoint from a task + plan + observations.
+
+    ``repair_state`` carries the Phase 6 bounded repair state (attempts,
+    failure classification, verification state, stuck info). It is optional and
+    secret-safe (all carried text is already bounded + masked by the
+    intelligence layer).
+    """
     return {
         "task_id": task.id,
         "task": task.model_dump(mode="json"),
         "plan": plan.model_dump(mode="json") if plan else None,
         "observations": list(observations or [])[-20:],  # bounded
         "completed_step_ids": list(completed_step_ids or []),
-        "version": 1,
+        "repair_state": repair_state,
+        "version": 2,
     }
 
 
@@ -89,6 +97,10 @@ def restore_checkpoint(data: dict[str, Any]) -> tuple[Task, Plan | None, list[di
 
     Fail-closed: validates the checkpoint structure and raises
     :class:`CheckpointError` if it is incomplete or inconsistent.
+
+    Phase 6 repair state is restored separately via
+    :func:`restore_repair_state` so this function's signature stays stable for
+    Phase 1–5 callers.
     """
     if not isinstance(data, dict):
         raise CheckpointError("checkpoint is not a dict")
@@ -123,10 +135,35 @@ def restore_checkpoint(data: dict[str, Any]) -> tuple[Task, Plan | None, list[di
     return task, plan, list(observations or [])
 
 
+def restore_repair_state(data: dict[str, Any]) -> dict[str, Any] | None:
+    """Restore the Phase 6 repair state from a checkpoint dict.
+
+    Fail-closed: a structurally invalid ``repair_state`` raises
+    :class:`CheckpointError` rather than resuming with corrupted repair state.
+    A missing or ``None`` repair state returns ``None`` (Phase 1–5 checkpoint).
+    """
+    if "repair_state" not in data:
+        return None
+    rs = data.get("repair_state")
+    if rs is None:
+        return None
+    if not isinstance(rs, dict):
+        raise CheckpointError("checkpoint repair_state must be a dict or null")
+    # Validate the expected scalar fields are present and correctly typed.
+    if not isinstance(rs.get("verification_attempts", 0), int):
+        raise CheckpointError("repair_state.verification_attempts must be int")
+    if not isinstance(rs.get("total_recovery_attempts", 0), int):
+        raise CheckpointError("repair_state.total_recovery_attempts must be int")
+    if not isinstance(rs.get("attempts", []), list):
+        raise CheckpointError("repair_state.attempts must be a list")
+    return rs
+
+
 __all__ = [
     "CheckpointStore",
     "build_checkpoint",
     "restore_checkpoint",
+    "restore_repair_state",
     "Task",
     "Plan",
     "PlanStep",

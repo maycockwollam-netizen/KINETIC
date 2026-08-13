@@ -101,6 +101,28 @@ class Settings(BaseModel):
     enable_checkpoints: bool = True
     enable_memory_capture: bool = False
 
+    # --- Phase 6: coding intelligence, verification & recovery ----------
+    # Bounded repair: when final verification fails, analyze the failure and ask
+    # the agent (via the SAME AgentSession.query safe path) to repair, then
+    # re-verify. All budgets are bounded; off-by-default keeps Phase 5 behavior
+    # when not requested.
+    enable_repair: bool = False
+    max_repair_attempts: int = 2
+    max_verification_attempts: int = 3
+    max_total_recovery_attempts: int = 4
+    enable_stuck_detection: bool = True
+    enable_regression_check: bool = True
+    # Final review is off by default to preserve Phase 5 behavior; it is
+    # automatically engaged when repair is enabled (see Orchestrator).
+    enable_final_review: bool = False
+    # Bounded repair context presented to the model (no raw log dump).
+    repair_context_max_chars: int = 8000
+    repair_context_max_test_failures: int = 8
+    repair_context_max_changed_files: int = 20
+    # Change-analysis heuristics.
+    diff_max_changed_files: int = 200
+    diff_broad_change_threshold: int = 50
+
     @field_validator(
         "workspace_root", "session_root", "audit_log_path", "memory_db_path",
         "checkpoint_dir", mode="after",

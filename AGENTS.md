@@ -268,6 +268,91 @@ permission system / direct subprocess outside Environment.
 ## TODO Phase 6
 Not started. Do NOT implement until Phase 5 is committed & reported.
 
+## Phase 6 scope (DONE)
+Coding Intelligence, Verification & Recovery. Makes KINETIC substantially
+better at completing real coding tasks *after* the Phase 5 orchestration layer
+has planned and executed work. Flow: Task → Plan → Execute → Observe → Verify →
+Failure analysis → Locate cause → Repair → Retest → Regression verification →
+Diff/quality review → Complete OR bounded failure.
+- `src/kinetic/intelligence/` package:
+  - `models.py`: FailureAnalysis (bounded+secret-masked), TestFailureInfo,
+    ChangeRecord, ChangeAnalysis, RepairAttempt, RepairState, StuckSignal,
+    RegressionResult, ReviewCheck, ReviewResult.
+  - `parsers.py`: pure regex parsers for pytest/npm(jest)/cargo/go/generic;
+    graceful fallback; `analyze_test_output` dispatcher by command heuristic.
+  - `analyzer.py`: FailureAnalyzer → classify_failure + parsers + secret
+    masking + bounded stdout/stderr; `failure_signature` (excludes volatile
+    output) for stuck detection; `analysis_from_dict` round-trip.
+  - `diff.py`: ChangeAnalyzer over fetched git status/diff TEXT (pure — no
+    subprocess); GitInspector Protocol; GitToolsInspector delegates to existing
+    GitTools (permission-gated GIT_READ). Detects added/deleted/modified,
+    generated files, outside-workspace, broad changes, empty.
+  - `stuck.py`: StuckDetector (identical failure signature repeated → stuck;
+    bounded failure, never loops).
+  - `regression.py`: RegressionChecker runs broader verification via existing
+    Verifier (Environment.exec); FAIL after repair = regression.
+  - `review.py`: FinalReviewer deterministic checks (workspace valid,
+    verification passed, no unresolved failure, diff coherent, no outside-
+    workspace changes, bounded scope); generated-files advisory only; NO
+    subjective AI quality score.
+  - `repair.py`: RepairCoordinator (bounded loop: preserve original failure →
+    analyze → build bounded repair context → ask agent via RepairRunner Protocol
+    (AgentRepairRunner = SAME AgentSession.query safe path — NO second agent
+    loop/ToolRegistry/permission system) → re-verify via Verifier → stuck
+    detect → regression check; bounded by max_repair_attempts +
+    max_verification_attempts). RepairContextBuilder (bounded, secret-masked,
+    includes previous attempts so model doesn't repeat).
+- New FailureClass members: LINT_FAILURE, DEPENDENCY_FAILURE, COMMAND_FAILURE,
+  CANCELLATION, VERIFICATION_INCONCLUSIVE (existing unchanged; CANCELLATION
+  added to NON_RETRYABLE). New errors: IntelligenceError/RepairError. New events:
+  FAILURE_ANALYZED, REPAIR_STARTED/COMPLETED/FAILED, VERIFICATION_RETRY,
+  STUCK_DETECTED, REGRESSION_DETECTED, FINAL_REVIEW_STARTED/COMPLETED.
+- Settings: enable_repair (off by default — preserves Phase 5 behavior),
+  max_repair_attempts, max_verification_attempts, max_total_recovery_attempts,
+  enable_stuck/regression/final_review, repair_context_*, diff_*.
+- ExecutionController: optional repair_coordinator/change_analyzer/final_reviewer
+  (None → Phase 5 behavior). On final-verify FAIL → _attempt_repair; on repair
+  success → re-verify + final review. ExecutionOutcome gains `repair`/`review`.
+- Orchestrator: _build_intelligence wires Phase 6 from settings; AgentRepairRunner
+  wraps AgentSession.query (same safe path); GitToolsInspector wraps GitTools.
+  enable_final_review auto-engaged when repair enabled.
+- Checkpoints: version 2; build_checkpoint takes repair_state; restore_repair_state
+  fail-closed on corrupt/typed fields (Phase 1-5 v1 checkpoints still restore).
+- CLI: `kinetic task inspect <id>` (full state + repair state),
+  `kinetic task failures <id>` (failure analysis), `kinetic task verify <id>`
+  (re-run verification, requires API key — provisions env, no model).
+- SECURITY: intelligence layer is pure analysis + orchestration — NO subprocess,
+  NO os.system, NO shell=True, NO run_command import, NO direct GitTools
+  instantiation, NO direct filesystem mutation. All execution goes through
+  existing Environment.exec / GitTools / permission policy. Repair reuses
+  AgentSession.query (same SDK loop). All retry/repair loops bounded; stuck
+  tasks terminate deterministically; secrets masked before persist/audit/model.
+485 tests pass (388 prior + 97 new Phase 6). Ruff clean. No secrets committed.
+
+## Phase 6 gotchas
+- enable_repair/enable_final_review default False → Phase 5 behavior unchanged
+  for existing tests/orchestrator. Final review auto-engages ONLY when repair
+  enabled (to avoid failing inspect-only tasks on empty diff).
+- Step-level verification runs on the FINAL step (`_is_final_step`), so a failing
+  verification command causes step failure (Phase 5 behavior) BEFORE the final-
+  verify repair path. To test repair, inject a scripted verifier where step-level
+  verify passes but final verify fails, AND inject it on BOTH controller.verifier
+  AND repair_coordinator._verifier (they are separate references).
+- FailureAnalyzer._refine_class upgrades TOOL_FAILURE→BUILD/LINT/TEST based on
+  command, and detects CANCELLATION/TIMEOUT/PERMISSION/ENV/DEPENDENCY/INCONCLUSIVE
+  from output text. classify_failure is the Phase 5 base; _refine_class layers on.
+- RegressionChecker treats broader-verify FAIL after repair as regression
+  (INCONCLUSIVE is NOT a regression — no command/cannot run). before_passed is
+  recorded but the decisive signal is after_failed.
+- Circular import: executor.py imports intelligence modules under TYPE_CHECKING
+  only (string annotations) + lazy import of ChangeAnalysis inside _final_review.
+  intelligence.models imports kinetic.tasks.policies (not the tasks package), so
+  importing kinetic.intelligence does NOT trigger kinetic.tasks.__init__.
+- frozen TestFailureInfo file/line set via object.__setattr__ in npm/go parsers
+  (attaching FAIL-file/package to already-created failure records).
+- Parser line extraction: pytest assertion location is on a SEPARATE line
+  (`file.py:NN:`), so _find_assertion_location scans the full output for it.
+
 ## Phase 3 FINAL HARDENING (DONE — security/correctness/reliability only, no new features)
 Verified & fixed only security/correctness/reliability/integration issues:
 - **Permission boundary**: `Environment.exec` now enforces
