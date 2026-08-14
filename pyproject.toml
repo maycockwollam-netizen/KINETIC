@@ -16,6 +16,8 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "click>=8.0",
+    "starlette>=0.37",
+    "uvicorn>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +51,7 @@ only-include = [
     "security",
     "tasks",
     "tools",
+    "web",
     "errors.py",
     "lifecycle.py",
     "paths.py",
@@ -63,6 +66,18 @@ filterwarnings = [
     # behavior; not a Phase 5 concern). The can_use_tool gate still runs for
     # tools that are not blanket-allowed.
     'ignore:can_use_tool will not be invoked:UserWarning',
+    # TestClient (httpx) deprecation about raw bytes uploads; we use content=
+    # in tests, but the legacy client may still emit this in some versions.
+    'ignore:Use .*content=<\\.\\.\\.>.* to upload raw bytes:DeprecationWarning',
+    # In the P7.3 web tests a background pump coroutine may be created on a
+    # short-lived test event loop that closes before it is awaited (a test
+    # artifact of the in-process TestClient portal, not a production issue).
+    "ignore:coroutine 'WebConsole._pump_events' was never awaited:RuntimeWarning",
+    # Starlette's pure-ASGI middleware + the in-process TestClient portal can
+    # surface an unraisable GeneratorExit when the portal's loop closes while a
+    # background task is still pending. Production runs under uvicorn where the
+    # loop persists across requests; this is a test-only teardown artifact.
+    "ignore:Exception ignored in:pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.ruff]

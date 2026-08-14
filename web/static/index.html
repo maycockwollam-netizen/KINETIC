@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KINETIC — Web Agent Test Console</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161a22; --panel-2: #1d2230; --border: #2a3142;
+    --fg: #e6e9ef; --muted: #8b93a7; --accent: #4f8cff; --accent-2: #6cf0c4;
+    --warn: #ffb454; --err: #ff6b6b; --ok: #6cf09c;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+  header .badge.warn { color: var(--warn); border-color: var(--warn); }
+  header .badge.ok { color: var(--ok); border-color: var(--ok); }
+  header .meta { margin-left: auto; color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    display: flex; flex-direction: column; min-height: 120px; overflow: hidden; }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--panel-2);
+    display: flex; align-items: center; gap: 8px; }
+  .panel h2 .hint { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .panel .body { padding: 12px 14px; overflow: auto; flex: 1; }
+  textarea { width: 100%; min-height: 90px; resize: vertical; background: var(--bg);
+    color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    font-family: var(--mono); font-size: 13px; }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button { background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500; }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.secondary { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
+  button.danger { background: var(--err); }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; word-break: break-word; font-family: var(--mono); }
+  .state { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .state.created, .state.context_ready { background: var(--panel-2); color: var(--muted); }
+  .state.planning, .state.plan_ready, .state.recovering { background: #2a2540; color: #b9a8ff; }
+  .state.executing, .state.verifying { background: #1f3a2e; color: var(--accent-2); }
+  .state.completed { background: #143022; color: var(--ok); }
+  .state.failed { background: #3a1f1f; color: var(--err); }
+  .state.cancelled { background: #2a2a2a; color: var(--muted); }
+  #events { font-family: var(--mono); font-size: 12px; line-height: 1.5; max-height: 52vh; }
+  .ev { display: grid; grid-template-columns: 70px 150px 1fr; gap: 8px; padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,.04); }
+  .ev .t { color: var(--muted); }
+  .ev .ty { color: var(--accent); font-weight: 600; }
+  .ev .d { color: var(--fg); word-break: break-word; white-space: pre-wrap; }
+  .ev.task_completed .ty, .ev.task_state_changed .ty { color: var(--accent-2); }
+  .ev.task_failed .ty, .ev.repair_failed .ty { color: var(--err); }
+  .ev.task_cancelled .ty { color: var(--warn); }
+  #agent-output { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
+  .tools .tool { display: grid; grid-template-columns: 140px 70px 70px 1fr; gap: 8px;
+    padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px; font-family: var(--mono); }
+  .tools .tool .ok { color: var(--ok); } .tools .tool .bad { color: var(--err); }
+  .fail-box { background: #2a1a1a; border: 1px solid var(--err); border-radius: 6px; padding: 10px; }
+  .fail-box .cls { color: var(--err); font-weight: 600; }
+  .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
+  .err-line { color: var(--err); font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>KINETIC Web Agent Test Console</h1>
+  <span class="badge" id="backend-badge">backend: ?</span>
+  <span class="badge" id="key-badge">API key: ?</span>
+  <span class="meta" id="ws-info">workspace: —</span>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Task Composer</h2>
+    <div class="body">
+      <textarea id="prompt" placeholder="Describe the coding task for the agent…"></textarea>
+      <div class="row">
+        <button id="start-btn">Start Task</button>
+        <button id="cancel-btn" class="danger" disabled>Cancel Task</button>
+        <button id="clear-btn" class="secondary">Clear</button>
+      </div>
+      <div id="composer-error" class="err-line" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Task Status</h2>
+    <div class="body">
+      <dl class="kv" id="status-kv">
+        <dt>Task ID</dt><dd id="s-id">—</dd>
+        <dt>State</dt><dd id="s-state">—</dd>
+        <dt>Current step</dt><dd id="s-step">—</dd>
+        <dt>Attempts</dt><dd id="s-attempts">—</dd>
+        <dt>Replans</dt><dd id="s-replans">—</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Live Event Console <span class="hint">SSE</span></h2>
+    <div class="body" id="events"><div class="empty">No events yet. Start a task.</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Agent Output</h2>
+    <div class="body" id="agent-output"><div class="empty">No agent output yet.</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Tool Activity</h2>
+    <div class="body tools" id="tools"><div class="empty">No tool activity yet.</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Failure / Recovery</h2>
+    <div class="body" id="failure"><div class="empty">No failures.</div></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let currentTaskId = null;
+let eventSource = null;
+let pollTimer = null;
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleTimeString([], {hour12:false}); }
+  catch { return iso; }
+}
+
+function setErr(el, msg) { el.textContent = msg || ''; }
+
+async function checkHealth() {
+  try {
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    $('backend-badge').textContent = 'backend: ' + (d.backend_ready ? 'ready' : 'closed');
+    $('backend-badge').className = 'badge ' + (d.backend_ready ? 'ok' : 'warn');
+    $('key-badge').textContent = 'API key: ' + (d.api_key_configured ? 'set' : 'missing');
+    $('key-badge').className = 'badge ' + (d.api_key_configured ? 'ok' : 'warn');
+    $('ws-info').textContent = 'workspace: ' + (d.workspace || '—');
+  } catch (e) {
+    $('backend-badge').textContent = 'backend: offline';
+    $('backend-badge').className = 'badge warn';
+  }
+}
+
+async function startTask() {
+  const prompt = $('prompt').value.trim();
+  setErr($('composer-error'), '');
+  if (!prompt) { setErr($('composer-error'), 'Prompt is required.'); return; }
+  $('start-btn').disabled = true;
+  try {
+    const r = await fetch('/api/tasks', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt}),
+    });
+    const d = await r.json();
+    if (!r.ok) { setErr($('composer-error'), d.error || ('HTTP ' + r.status)); return; }
+    currentTaskId = d.task_id;
+    $('cancel-btn').disabled = false;
+    refreshStatus();
+    openEventStream();
+  } catch (e) {
+    setErr($('composer-error'), 'Network error: ' + e.message);
+  } finally {
+    $('start-btn').disabled = false;
+  }
+}
+
+async function cancelTask() {
+  if (!currentTaskId) return;
+  try {
+    await fetch('/api/tasks/' + currentTaskId + '/cancel', {method: 'POST'});
+    refreshStatus();
+  } catch (e) { setErr($('composer-error'), 'Cancel failed: ' + e.message); }
+}
+
+function clearAll() {
+  $('prompt').value = '';
+  setErr($('composer-error'), '');
+  currentTaskId = null;
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  $('cancel-btn').disabled = true;
+  $('events').innerHTML = '<div class="empty">No events yet. Start a task.</div>';
+  $('agent-output').innerHTML = '<div class="empty">No agent output yet.</div>';
+  $('tools').innerHTML = '<div class="empty">No tool activity yet.</div>';
+  $('failure').innerHTML = '<div class="empty">No failures.</div>';
+  $('s-id').textContent = '—'; $('s-state').textContent = '—';
+  $('s-step').textContent = '—'; $('s-attempts').textContent = '—'; $('s-replans').textContent = '—';
+}
+
+function openEventStream() {
+  if (eventSource) eventSource.close();
+  const url = '/api/tasks/' + currentTaskId + '/events';
+  eventSource = new EventSource(url);
+  eventSource.onopen = () => appendEvent({type:'stream_open', timestamp:new Date().toISOString(), data:{}});
+  eventSource.onerror = () => { /* browser auto-reconnects */ };
+  eventSource.addEventListener('stream_end', (m) => {
+    appendEvent({type:'stream_end', timestamp:new Date().toISOString(), data:{}});
+    eventSource.close();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(refreshStatus, 1500);
+    setTimeout(() => { if (pollTimer) clearInterval(pollTimer); }, 8000);
+  });
+  // Listen to every named event.
+  const allTypes = [
+    'agent_started','agent_message','agent_error','tool_started','tool_output','tool_finished',
+    'command_started','command_finished','file_changed','test_started','test_finished',
+    'task_completed','project_scanned','workspace_created','workspace_deleted',
+    'git_command_started','git_command_finished','dependency_detected','dependency_install_started',
+    'dependency_install_finished','environment_created','environment_started','environment_stopped',
+    'environment_destroyed','environment_failed','process_started','process_finished',
+    'process_cancelled','process_timeout','permission_denied','memory_created','memory_updated',
+    'memory_deleted','memory_invalidated','memory_retrieved','memory_consolidated','context_built',
+    'context_budget_exceeded','task_created','task_state_changed','task_planning_started',
+    'task_plan_created','task_step_started','task_step_completed','task_step_failed',
+    'task_verification_started','task_verification_completed','task_recovery_started',
+    'task_recovery_completed','task_replanned','task_cancelled','task_failed',
+    'task_checkpoint_created','failure_analyzed','repair_started','repair_completed',
+    'repair_failed','verification_retry','stuck_detected','regression_detected',
+    'final_review_started','final_review_completed','message'
+  ];
+  allTypes.forEach((t) => {
+    eventSource.addEventListener(t, (m) => {
+      let data = {};
+      try { data = JSON.parse(m.data); } catch {}
+      appendEvent({type: t, timestamp: data.timestamp || new Date().toISOString(), data});
+      routeEvent(t, data);
+    });
+  });
+}
+
+function appendEvent(ev) {
+  const box = $('events');
+  if (box.querySelector('.empty')) box.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'ev ' + ev.type;
+  const dataStr = JSON.stringify(ev.data, null, 0);
+  row.innerHTML = '<span class="t">' + fmtTime(ev.timestamp) + '</span>' +
+    '<span class="ty">' + ev.type + '</span>' +
+    '<span class="d"></span>';
+  row.querySelector('.d').textContent = dataStr;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function routeEvent(type, data) {
+  if (type === 'agent_message' || type === 'agent_started') {
+    if (data.prompt || data.result || data.text) {
+      const out = $('agent-output');
+      if (out.querySelector('.empty')) out.innerHTML = '';
+      const line = document.createElement('div');
+      line.textContent = data.prompt || data.result || data.text || '';
+      out.appendChild(line);
+    }
+  } else if (type === 'tool_started' || type === 'tool_finished' || type === 'tool_output') {
+    addToolRow(data);
+  } else if (type === 'task_failed' || type === 'task_step_failed' || type === 'repair_failed') {
+    showFailure(data);
+  } else if (type === 'task_state_changed') {
+    refreshStatus();
+  }
+}
+
+function addToolRow(data) {
+  const box = $('tools');
+  if (box.querySelector('.empty')) box.innerHTML = '';
+  const name = data.tool || data.name || 'tool';
+  const status = data.status || (data.exit_code != null ? (data.exit_code === 0 ? 'ok' : 'fail') : '…');
+  const dur = data.duration_ms != null ? (data.duration_ms + 'ms') : '';
+  const summary = data.result || data.output || data.message || '';
+  const row = document.createElement('div');
+  row.className = 'tool';
+  row.innerHTML = '<span>' + name + '</span>' +
+    '<span class="' + (status === 'fail' ? 'bad' : (status === 'ok' ? 'ok' : '')) + '">' + status + '</span>' +
+    '<span>' + dur + '</span><span></span>';
+  row.querySelector('span:last-child').textContent = String(summary).slice(0, 200);
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function showFailure(data) {
+  const box = $('failure');
+  box.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'fail-box';
+  const cls = data.failure_class || data.class || 'failure';
+  const msg = data.message || data.reason || data.error || '';
+  div.innerHTML = '<div class="cls">' + cls + '</div><div class="msg"></div>';
+  div.querySelector('.msg').textContent = msg;
+  box.appendChild(div);
+}
+
+async function refreshStatus() {
+  if (!currentTaskId) return;
+  try {
+    const r = await fetch('/api/tasks/' + currentTaskId);
+    if (!r.ok) return;
+    const d = await r.json();
+    $('s-id').textContent = d.id || currentTaskId;
+    $('s-state').innerHTML = d.state ? '<span class="state ' + d.state + '">' + d.state + '</span>' : '—';
+    $('s-step').textContent = d.current_step || '—';
+    $('s-attempts').textContent = d.attempt_count != null ? d.attempt_count : '—';
+    $('s-replans').textContent = d.replan_count != null ? d.replan_count : '—';
+    if (d.failure) showFailure(d.failure);
+    const terminal = ['completed','failed','cancelled'].includes(d.state);
+    $('cancel-btn').disabled = terminal;
+    if (d.outcome && d.outcome.final_verification) {
+      const fv = d.outcome.final_verification;
+      const box = $('failure');
+      const note = document.createElement('div');
+      note.style.marginTop = '8px';
+      note.innerHTML = '<strong>Verification:</strong> <span></span>';
+      note.querySelector('span').textContent = fv.outcome + (fv.reason ? ' — ' + fv.reason : '');
+      box.appendChild(note);
+    }
+  } catch {}
+}
+
+$('start-btn').addEventListener('click', startTask);
+$('cancel-btn').addEventListener('click', cancelTask);
+$('clear-btn').addEventListener('click', clearAll);
+checkHealth();
+setInterval(checkHealth, 10000);
+</script>
+</body>
+</html>

@@ -398,3 +398,82 @@ def task_verify(task_id: str, workspace: str, allow_network: bool, runtime: str 
             await session.finish()
 
     anyio.run(_run)
+
+
+# --- Phase 7.3: web agent test console -------------------------------------
+
+
+@cli.command()
+@click.option("--workspace", "-w", default=".", help="Project workspace path.")
+@click.option("--host", default=None, help="Bind host (default: from settings).")
+@click.option("--port", default=None, type=int, help="Bind port (default: from settings).")
+@click.option("--allow-no-key", is_flag=True, default=False,
+              help="Start the server even without ANTHROPIC_API_KEY (tasks will fail to run).")
+@click.pass_context
+def web(ctx: click.Context, workspace: str, host: str | None, port: int | None,
+        allow_no_key: bool) -> None:
+    """Start the KINETIC Web Agent Test Console (Phase 7.3).
+
+    A thin HTTP/SSE adapter over the existing backend. This is a test/control
+    surface, NOT the final product UI. Open http://<host>:<port>/ in a browser.
+    """
+    import os
+    from pathlib import Path as _Path
+
+    settings = _load_settings(ctx)
+    settings.ensure_directories()
+    ws = _Path(workspace).resolve()
+    if not ws.exists():
+        click.echo(f"error: workspace not found: {ws}", err=True)
+        sys.exit(1)
+
+    if not allow_no_key and not os.environ.get("ANTHROPIC_API_KEY"):
+        click.echo(
+            "warning: ANTHROPIC_API_KEY is not set. The console will start, but "
+            "creating tasks will fail until a key is set. Use --allow-no-key to "
+            "suppress this warning.",
+            err=True,
+        )
+
+    try:
+        import uvicorn
+    except ImportError as exc:
+        click.echo(f"error: uvicorn is not installed: {exc}", err=True)
+        sys.exit(1)
+
+    from web import create_app
+    from web.console import WebConsole
+
+    bind_host = host or settings.web_host
+    bind_port = port or settings.web_port
+    require_key = not allow_no_key
+    app = create_app(
+        settings=settings, workspace=ws, require_api_key=require_key,
+    )
+    console: WebConsole = app.state.console
+
+    import anyio
+
+    from lifecycle import install_signal_handlers
+
+    async def _serve() -> None:
+        coordinator = console.register_shutdown()
+        remove_signals = install_signal_handlers(coordinator)
+        config = uvicorn.Config(
+            app, host=bind_host, port=bind_port, log_level="info",
+            access_log=False, lifespan="on",
+        )
+        server = uvicorn.Server(config)
+        click.echo(f"KINETIC Web Agent Test Console on http://{bind_host}:{bind_port}")
+        click.echo(f"workspace: {ws}")
+        try:
+            await server.serve()
+        finally:
+            await console.shutdown(reason="cli exit")
+            remove_signals()
+
+    import contextlib
+
+    with contextlib.suppress(KeyboardInterrupt):
+        anyio.run(_serve)
+

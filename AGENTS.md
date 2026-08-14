@@ -531,5 +531,81 @@ editable; CLI `kinetic` + all task subcommands work. No behavior change.
   explicit list of source roots so the unsafe-pattern grep still covers all
   application source without scanning tests/.venv/build.
 
+## Phase 7.3 scope (DONE — web agent test console)
+A thin HTTP/SSE adapter over the existing P1–P7.2 backend. NOT the final product
+UI — a test/control surface so real agent tasks can be observed in a browser
+before Phase 8. The web layer is an adapter/interface, NOT a new execution system.
+- `web/` package:
+  - `serialize.py`: single chokepoint that turns domain objects into bounded,
+    JSON-serializable dicts + masks credential-like content via the existing
+    `SecretDetector`. Identifier keys (task_id/session_id/plan_id/step_id) are
+    exempt from masking (they are system UUIDs the browser needs, not secrets);
+    free-form content is always masked + capped.
+  - `console.py`: `WebConsole` owns per-task `TaskRun`s. For each task it builds
+    the REAL `AgentSession`+`Orchestrator`+`Environment`+`EventBus` stack and
+    runs the task in a background asyncio task. Routes HTTP to TaskManager
+    (state) + Orchestrator (execution); exposes the EventBus as a bounded
+    per-task event ring; forwards cancel to the existing cooperative
+    `CancellationToken`; tears every run down via `ShutdownCoordinator`. NO
+    subprocess, NO filesystem mutation, NO second ToolRegistry/PermissionPolicy,
+    NO direct Environment access.
+  - `app.py`: Starlette ASGI app. Routes: health, create/list/get/start/resume/
+    cancel/outcome tasks, SSE events. Pure-ASGI `_OriginGuardMiddleware` (NOT
+    BaseHTTPMiddleware — avoids buffering the SSE stream + TestClient teardown
+    artifacts) rejects cross-origin requests. SSE replays history then streams
+    live events until the task terminates; reconnect via `Last-Event-ID`.
+  - `static/index.html`: responsive vanilla-JS frontend (no framework). Task
+    composer, status, live event console, agent output, tool activity,
+    failure/recovery panel, cancel.
+- Config (`config/settings.py`): `web_enabled`(F)/`web_host`/`web_port`/
+  `web_event_poll_timeout`/`web_max_event_log` with validators (port 1..65535,
+  timeout 0< ≤60, log 1..10000). Env prefix `KINETIC_WEB_*`.
+- CLI: `kinetic web [--workspace] [--host] [--port] [--allow-no-key]` starts
+  uvicorn, wires `ShutdownCoordinator`+signal handlers, cleans up on exit.
+- Packaging: `web` added to hatchling `only-include`; `starlette`+`uvicorn`
+  added to deps. Wheel builds + installs in clean venv; CLI entrypoint works.
+- Security: `test_phase7_security.py` `_SOURCE_DIRS` now includes `web` so the
+  unsafe-pattern grep (no subprocess/os.system/shell=True/eval/exec) covers the
+  web layer. Verified: no subprocess import, no filesystem mutation, no
+  PermissionPolicy/Environment bypass in the web layer.
+760 tests pass (725 prior + 35 new Phase 7.3). 17 skipped (16 prior + 1 gated
+live-agent test). Ruff clean. Wheel builds + installs. CLI works. E2E passes.
+
+## Phase 7.3 gotchas
+- The web layer must NOT mask system-generated identifiers. The `SecretDetector`
+  matches `token_blob` = ≥32-char hex/base64, so a `uuid4().hex` task_id
+  (32 hex chars) looks like a secret. `web.serialize._IDENTIFIER_KEYS` exempts
+  id/task_id/session_id/plan_id/step_id/project_id/name from masking (a UUID is
+  not a credential; masking it breaks the API contract). Free-form content
+  (prompts, tool output, error messages) is ALWAYS masked.
+- The EventBus's own `_redact_secrets` (Phase 7) runs at publish time BEFORE the
+  web layer sees an event — so a task_id inside event `data` may appear as
+  `<redacted>`. This is PRE-EXISTING EventBus behavior preserved per spec; the
+  frontend gets the task_id from the URL/creation response (which the web layer
+  correctly preserves), and SSE is already task-scoped, so it doesn't break.
+- The SSE handler is a pure `StreamingResponse` (not `sse-starlette`) for full
+  control over the bounded poll loop + `stream_end` sentinel. It drains the
+  per-task ring on connect (replay), then polls with `web_event_poll_timeout`
+  until `run.is_terminal`, emits `stream_end`, returns.
+- `_OriginGuardMiddleware` is a pure ASGI middleware (`__call__(scope, receive,
+  send)`), NOT `BaseHTTPMiddleware`. The latter buffers the response stream
+  (breaking SSE) and surfaces unraisable GeneratorExit warnings under the
+  Starlette TestClient portal. Pure ASGI avoids both.
+- TestClient (httpx-based) runs each request in a synced portal whose loop is
+  suspended between requests, so a background `asyncio.create_task` from
+  `create_task` only progresses while a request is being served (the loop runs
+  during request handling). Tests use `delay=0.0` (yield-only) fakes so the
+  background task completes across requests; SSE tests keep the loop alive
+  during streaming so real delays would also work.
+- `_now()` uses `asyncio.get_running_loop().time()` with a `time.monotonic()`
+  fallback — safe during GC when a background task is destroyed with no running
+  loop (the TestClient teardown path).
+- Pytest `filterwarnings` adds three test-only suppressions: the httpx raw-bytes
+  deprecation, the `_pump_events` never-awaited RuntimeWarning (test portal
+  closes before the coroutine is awaited), and the Starlette/TestClient
+  unraisable GeneratorExit (portal loop closes while a background task is
+  pending). Production runs under uvicorn where the loop persists across
+  requests, so none of these occur in real use.
+
 ## TODO Phase 8
 Not started.

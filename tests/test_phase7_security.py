@@ -23,7 +23,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 _SOURCE_DIRS = [
     "agent", "cli", "config", "context", "dependencies", "environment",
     "events", "intelligence", "memory", "observability", "project", "security",
-    "tasks", "tools",
+    "tasks", "tools", "web",
 ]
 _SOURCE_MODULES = ["errors.py", "lifecycle.py", "paths.py"]
 

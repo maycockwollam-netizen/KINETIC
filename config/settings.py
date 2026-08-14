@@ -140,6 +140,17 @@ class Settings(BaseSettings):
     diff_max_changed_files: int = 200
     diff_broad_change_threshold: int = 50
 
+    # --- Phase 7.3: web agent test console -----------------------------
+    # A thin HTTP/SSE adapter over the existing backend. Default disabled so a
+    # plain agent run never opens a listening socket; enabling is explicit.
+    web_enabled: bool = False
+    web_host: str = "127.0.0.1"
+    web_port: int = 12000
+    # Poll interval (seconds) used inside the SSE pump when no event is ready.
+    web_event_poll_timeout: float = 1.0
+    # Maximum events kept per task for late SSE clients (per-task ring).
+    web_max_event_log: int = 512
+
     @field_validator(
         "workspace_root", "session_root", "audit_log_path", "memory_db_path",
         "checkpoint_dir", mode="after",
@@ -342,6 +353,40 @@ class Settings(BaseSettings):
     def _bounded_dim(cls, v: int) -> int:
         if v > 4096:
             raise ValueError("embedding_dimensions must be <= 4096")
+        return v
+
+    # --- Phase 7.3: web console validators ---------------------------------
+
+    @field_validator("web_host", mode="after")
+    @classmethod
+    def _web_host_nonempty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("web_host must be a non-empty host")
+        return v.strip()
+
+    @field_validator("web_port", mode="after")
+    @classmethod
+    def _web_port_range(cls, v: int) -> int:
+        if v < 1 or v > 65535:
+            raise ValueError("web_port must be in 1..65535")
+        return v
+
+    @field_validator("web_event_poll_timeout", mode="after")
+    @classmethod
+    def _web_poll_timeout(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("web_event_poll_timeout must be positive")
+        if v > 60:
+            raise ValueError("web_event_poll_timeout must be <= 60")
+        return v
+
+    @field_validator("web_max_event_log", mode="after")
+    @classmethod
+    def _web_event_log_bounded(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("web_max_event_log must be >= 1")
+        if v > 10_000:
+            raise ValueError("web_max_event_log must be <= 10000")
         return v
 
     @model_validator(mode="after")

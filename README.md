@@ -15,6 +15,8 @@ Phases 1–7 are implemented:
 - **Phase 5**: task planning & execution orchestration — state machine, planner, bounded recovery, checkpoints.
 - **Phase 6**: coding intelligence — failure analysis, bounded repair, stuck detection, regression checking, deterministic final review.
 - **Phase 7**: production hardening — configuration validation, structured logging, metrics, EventBus hardening, graceful shutdown, environment diagnostics, security audit, CLI hardening, packaging, documentation.
+- **Phase 7.2**: repository/package namespace flattening — the `kinetic/` namespace was removed; source lives as top-level packages at the repo root.
+- **Phase 7.3**: Web Agent Test Console — a thin HTTP/SSE adapter over the existing backend for observing real agent tasks in a browser.
 
 The architecture is deliberately layered so that a future "AI Company" layer (CEO agent, departments, worker pools, etc.) can sit *above* the coding-agent core without rewriting it.
 
@@ -41,6 +43,7 @@ There is exactly one safe execution path. Security is enforced at the runtime/to
     security/        tool permissions, audit logging, secret detection
     tasks/           task state machine, planner, executor, verifier, checkpoints
     tools/           tool registry + terminal / filesystem / git / project / memory tools
+    web/             Web Agent Test Console (Phase 7.3) — HTTP/SSE adapter over the backend
     errors.py        shared error types
     lifecycle.py     graceful shutdown coordinator
     paths.py         shared path-safety utilities
@@ -72,6 +75,66 @@ repository root (the former `kinetic/` namespace was flattened in Phase 7.2).
     kinetic task cancel <task_id>
     kinetic task resume <task_id>            # requires API key
     kinetic task verify <task_id>            # re-run verification
+
+## Web Agent Test Console (Phase 7.3)
+
+> **This is a test/control surface, NOT the final KINETIC product UI.** It exists
+> to make the existing P1–P7.2 backend executable and observable through a
+> browser so real agent tasks can be tested before Phase 8.
+
+A thin HTTP/SSE adapter over the existing backend. It owns no execution path:
+task state comes from `TaskManager`, execution from `Orchestrator`, events from
+`EventBus`. Every tool call still flows through the single safe path
+(AgentSession → PermissionPolicy → Environment).
+
+    kinetic web --workspace . --port 12000
+
+Then open `http://127.0.0.1:12000/` in a browser. Set `ANTHROPIC_API_KEY` to
+run live agent tasks; without it the console starts but task creation fails with
+a clear error (use `--allow-no-key` to start the server regardless).
+
+### Web API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET  | `/api/health` | status, version, backend readiness, key presence |
+| POST | `/api/tasks` | create + start a task (`{"prompt": "..."}`) |
+| GET  | `/api/tasks` | list task snapshots |
+| GET  | `/api/tasks/{id}` | bounded task state snapshot |
+| POST | `/api/tasks/{id}/start` | returns current state (tasks start on creation) |
+| POST | `/api/tasks/{id}/resume` | resume a checkpointed task (requires key) |
+| POST | `/api/tasks/{id}/cancel` | cancel via the existing cooperative mechanism |
+| GET  | `/api/tasks/{id}/events` | SSE stream of live task events |
+| GET  | `/api/tasks/{id}/outcome` | bounded outcome of a finished task |
+
+The SSE stream replays recent history (bounded, secret-masked) then streams live
+events from the task's `EventBus` until the task terminates. Reconnect is
+supported via the `Last-Event-ID` header.
+
+### Web security model
+
+- The web layer **never** calls subprocess, mutates the filesystem, or executes
+  in the `Environment` directly — it routes everything through the existing
+  `Orchestrator`/`AgentSession`.
+- Secret redaction reuses the existing `SecretDetector`: every response and
+  event payload is masked before crossing the application boundary.
+- API keys / environment variables are never sent to the browser (only a boolean
+  `api_key_configured` flag).
+- A pure-ASGI origin guard rejects cross-origin requests to the API surface
+  (the console binds to localhost by default and has no auth layer).
+- The per-task event log is bounded (`web_max_event_log`); the EventBus already
+  caps + redacts payloads at publish time.
+
+### Web configuration
+
+    KINETIC_WEB_ENABLED=true
+    KINETIC_WEB_HOST=127.0.0.1
+    KINETIC_WEB_PORT=12000
+    KINETIC_WEB_EVENT_POLL_TIMEOUT=1.0   # SSE poll interval (s)
+    KINETIC_WEB_MAX_EVENT_LOG=512        # per-task event ring size
+
+Every numeric setting has validators and sensible bounds (validated at
+construction, like all KINETIC settings).
 
 ## Configuration
 
