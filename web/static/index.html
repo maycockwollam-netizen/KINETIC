@@ -726,6 +726,8 @@ button { cursor: pointer; border: none; background: none; }
           </div>
           <div class="settings-section"><h3>Mô hình</h3>
             <div class="settings-row"><div class="sr-label">Mô hình mặc định</div><select id="set-model" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;"><option>Sonnet 5</option><option>Haiku</option><option>Opus</option><option>Auto</option></select></div>
+            <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px"><div class="sr-label">Model ID tùy chỉnh <span style="color:var(--muted);font-weight:normal">(dùng với proxy/gateway — vd: openhands/gpt-4o)</span></div>
+              <input type="text" id="set-custom-model" placeholder="để trống để dùng lựa chọn trên" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 8px;font-size:13px;color:var(--text)" /></div>
             <div class="settings-row"><div class="sr-label">Cho phép repair tự động</div><label class="toggle"><input type="checkbox" id="set-repair" /><span class="track"></span></label></div>
           </div>
           <div class="settings-section"><h3>Bảo mật & API</h3>
@@ -986,7 +988,8 @@ async function sendMessage(text) {
     const taskBody = { prompt: text };
     const agent = State.agents.find(a => a.id === conv.agentId);
     if (agent && agent.id) taskBody.agent_id = agent.id;
-    if (currentModel && currentModel !== "Auto") taskBody.model = MODEL_API[currentModel];
+    const mid = resolveModelId();
+    if (mid) taskBody.model = mid;
     if (State.llm && State.llm.base_url) taskBody.base_url = State.llm.base_url;
     // Send the in-memory API key only if the user entered one this session;
     // otherwise the backend falls back to ANTHROPIC_API_KEY.
@@ -1735,20 +1738,70 @@ const MODELS = [{ name: "Sonnet 5", desc: "Cân bằng", tag: "Balanced" }, { na
 // Map friendly model names to real model identifiers sent to the backend.
 // "Auto" is intentionally absent so the backend uses its configured default.
 const MODEL_API = { "Sonnet 5": "claude-sonnet-4-5-20250929", "Haiku": "claude-haiku-4-5-20251001", "Opus": "claude-opus-4-1-20250805" };
+// A custom (free-form) model id the user typed in, e.g. when using a proxy /
+// gateway (OpenHands, OpenAI-compatible, etc.). When set it overrides the
+// preset selection so non-Anthropic models can be used with a custom base_url.
+let customModelId = "";
 let currentModel = "Sonnet 5";
+// Resolve the model id actually sent to the backend: custom id wins, else the
+// preset mapping, else undefined (Auto -> backend default).
+function resolveModelId() {
+  if (customModelId && customModelId.trim()) return customModelId.trim();
+  if (currentModel && currentModel !== "Auto") return MODEL_API[currentModel];
+  return undefined;
+}
+function modelButtonLabel() {
+  if (customModelId && customModelId.trim()) return customModelId.trim().slice(0, 24) + " ";
+  return currentModel + " ";
+}
+function syncModelButtons() {
+  const lbl = modelButtonLabel();
+  const hb = $("#home-model-btn"); if (hb) hb.firstChild.textContent = lbl;
+  const cb = $("#chat-model-btn"); if (cb) cb.firstChild.textContent = lbl;
+}
+// Persist the model selection (preset + custom id) across reloads.
+function persistModel() {
+  try {
+    const p = JSON.parse(localStorage.getItem("kinetic_state") || "{}");
+    p.model = { preset: currentModel, custom: customModelId };
+    localStorage.setItem("kinetic_state", JSON.stringify(p));
+  } catch {}
+}
+function loadModel() {
+  try {
+    const p = JSON.parse(localStorage.getItem("kinetic_state") || "{}");
+    if (p.model) { currentModel = p.model.preset || currentModel; customModelId = p.model.custom || ""; }
+  } catch {}
+  const sm = $("#set-model"); if (sm) sm.value = currentModel;
+  const cm = $("#set-custom-model"); if (cm) cm.value = customModelId || "";
+  syncModelButtons();
+}
 function openModelMenu(btn) {
   closeMenu();
   const r = btn.getBoundingClientRect();
-  const m = el("div", ""); m.id = "ctx-menu"; m.style.cssText = `position:fixed;z-index:130;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:var(--shadow);top:${r.bottom + 4}px;left:${r.left}px;min-width:200px`;
+  const m = el("div", "", ""); m.id = "ctx-menu"; m.style.cssText = `position:fixed;z-index:130;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:var(--shadow);top:${r.bottom + 4}px;left:${r.left}px;min-width:220px`;
   for (const mo of MODELS) {
+    const isSel = !customModelId && mo.name === currentModel;
     const it = el("div", "", ""); it.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:13px;border-radius:6px;cursor:pointer";
-    it.innerHTML = `<div><div>${esc(mo.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(mo.desc)}</div></div>${mo.name === currentModel ? '<span style="margin-left:auto;color:var(--accent-2)">✓</span>' : ""}`;
-    it.onclick = () => { currentModel = mo.name; btn.firstChild.textContent = mo.name + " "; closeMenu(); };
+    it.innerHTML = `<div><div>${esc(mo.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(mo.desc)}</div></div>${isSel ? '<span style="margin-left:auto;color:var(--accent-2)">✓</span>' : ""}`;
+    it.onclick = () => { currentModel = mo.name; customModelId = ""; btn.firstChild.textContent = mo.name + " "; closeMenu(); persistModel(); };
     it.onmouseenter = () => it.style.background = "var(--surface-3)"; it.onmouseleave = () => it.style.background = "";
     m.appendChild(it);
   }
+  // Custom model id (free-form) -- lets the user target a non-Anthropic model
+  // when running behind a proxy/gateway with a custom base_url.
+  const custom = el("div", "", ""); custom.style.cssText = "border-top:1px solid var(--border);margin-top:4px;padding-top:6px";
+  const clbl = el("div", "", "Tùy chỉnh model"); clbl.style.cssText = "font-size:11px;color:var(--muted);padding:2px 6px 4px;text-transform:uppercase;letter-spacing:.06em";
+  custom.appendChild(clbl);
+  const inp = el("input", ""); inp.type = "text"; inp.placeholder = "vd: openhands/gpt-4o, gpt-4o-mini…";
+  inp.value = customModelId || "";
+  inp.style.cssText = "width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 8px;font-size:13px;color:var(--text)";
+  const apply = el("button", "", "Áp dụng"); apply.style.cssText = "width:100%;margin-top:6px;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px;font-size:13px;cursor:pointer";
+  apply.onclick = (e) => { e.stopPropagation(); const v = (inp.value || "").trim(); if (v) { customModelId = v; currentModel = "Auto"; btn.firstChild.textContent = v.slice(0, 24) + " "; closeMenu(); persistModel(); } };
+  custom.appendChild(inp); custom.appendChild(apply);
+  m.appendChild(custom);
   document.body.appendChild(m);
-  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 10);
+  setTimeout(() => { inp.focus(); document.addEventListener("click", closeMenu, { once: true }); }, 10);
 }
 
 /* ============================================================
@@ -1756,6 +1809,7 @@ function openModelMenu(btn) {
    ============================================================ */
 function init() {
   loadPersisted();
+  loadModel();
   // nav
   $$(".nav-item").forEach(n => n.addEventListener("click", (e) => { if (n.dataset.view === "home") { showView("home"); } else showView(n.dataset.view); }));
   $$('.home-section-head a[data-view]').forEach(a => a.addEventListener("click", () => showView(a.dataset.view)));
@@ -1786,7 +1840,8 @@ function init() {
   // settings
   $("#set-dark").addEventListener("change", (e) => { State.settings.dark = e.target.checked; applyTheme(); persist(); });
   $("#set-anim").addEventListener("change", (e) => { State.settings.anim = e.target.checked; document.body.style.setProperty("--ease", e.target.checked ? "" : "linear"); persist(); });
-  $("#set-model").addEventListener("change", (e) => { State.settings.model = e.target.value; currentModel = e.target.value; persist(); });
+  $("#set-model").addEventListener("change", (e) => { State.settings.model = e.target.value; currentModel = e.target.value; if (!customModelId) syncModelButtons(); persist(); persistModel(); });
+  $("#set-custom-model").addEventListener("input", (e) => { customModelId = (e.target.value || "").trim(); syncModelButtons(); persistModel(); });
   $("#set-repair").addEventListener("change", (e) => { State.settings.repair = e.target.checked; persist(); });
   $("#set-key-btn").addEventListener("click", saveLLMConfig);
   $("#set-interactive").addEventListener("change", (e) => { API.setLLM({ interactive_approval: e.target.checked }).then(() => { State.llm.interactive_approval = e.target.checked; renderSettingsStatus(); }).catch(() => toast("Không lưu được", "err")); });
@@ -1824,7 +1879,14 @@ async function loadBackendResources() {
 async function saveLLMConfig() {
   const base = ($("#llm-base").value || "").trim();
   const key = ($("#llm-key").value || "").trim();
-  const model = $("#set-model").value;
+  const preset = $("#set-model").value;
+  const custom = ($("#set-custom-model").value || "").trim();
+  // The effective default model: a custom id wins over the preset; otherwise
+  // map the preset to its real model id (Auto -> undefined so the backend uses
+  // its configured default). Sent to the backend so tasks that don't override
+  // the model per-task still use it.
+  let model = custom;
+  if (!model) { if (preset !== "Auto") model = MODEL_API[preset]; }
   try {
     const cfg = { base_url: base || "", model };
     if (key) cfg.api_key = key; // empty string clears; non-empty sets (in-memory only)

@@ -194,7 +194,10 @@ class WebConsole:
             raise ValueError("prompt must be non-empty")
 
         # Resolve the effective LLM config: per-task override > console default.
-        eff_model = model
+        # The model also falls back to the console-configured default set via
+        # set_llm_config — without this, a model chosen in Settings was silently
+        # ignored and the task always ran the adapter's hardcoded default.
+        eff_model = model or self._llm_model
         eff_base_url = base_url or self._llm_base_url
         eff_api_key = api_key or self._llm_api_key
         eff_system_prompt: str | None = None
