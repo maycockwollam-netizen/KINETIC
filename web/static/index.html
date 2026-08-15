@@ -1,340 +1,1736 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>KINETIC — Web Agent Test Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d12" />
+<title>KINETIC — AI Agent Workspace</title>
 <style>
+/* ============================================================
+   KINETIC DESIGN SYSTEM
+   calm → focused → powerful
+   ============================================================ */
+:root {
+  --bg: #0b0d12;
+  --bg-elev: #0f131a;
+  --surface: #141922;
+  --surface-2: #1a2029;
+  --surface-3: #212834;
+  --border: #232a36;
+  --border-soft: #1c232e;
+  --fg: #eef1f6;
+  --fg-2: #b7bfcc;
+  --muted: #7c8597;
+  --muted-2: #5a6273;
+
+  /* KINETIC blue-violet accent (lightning identity) */
+  --accent: #6d7cff;
+  --accent-2: #8a76ff;
+  --accent-soft: rgba(109,124,255,.14);
+  --accent-line: rgba(109,124,255,.32);
+
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --err: #f87171;
+  --info: #60a5fa;
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+
+  --sidebar-w: 272px;
+  --sidebar-collapsed: 0px;
+  --chat-max: 760px;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --shadow: 0 6px 24px rgba(0,0,0,.35);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,.45);
+
+  --ease: cubic-bezier(.4,0,.2,1);
+  --ease-out: cubic-bezier(.16,1,.3,1);
+}
+@media (prefers-color-scheme: light) {
   :root {
-    --bg: #0f1115; --panel: #161a22; --panel-2: #1d2230; --border: #2a3142;
-    --fg: #e6e9ef; --muted: #8b93a7; --accent: #4f8cff; --accent-2: #6cf0c4;
-    --warn: #ffb454; --err: #ff6b6b; --ok: #6cf09c;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --bg:#f7f8fb; --bg-elev:#fff; --surface:#fff; --surface-2:#f1f3f8;
+    --surface-3:#e8ebf2; --border:#e2e6ee; --border-soft:#eceff5;
+    --fg:#14181f; --fg-2:#3d4452; --muted:#6b7383; --muted-2:#94a0b3;
+    --accent:#5b6cff; --accent-2:#7c5cff;
+    --accent-soft:rgba(91,108,255,.10); --accent-line:rgba(91,108,255,.28);
+    --shadow-sm:0 1px 2px rgba(20,24,31,.06); --shadow:0 6px 24px rgba(20,24,31,.10);
+    --shadow-lg:0 16px 48px rgba(20,24,31,.16);
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-    font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-  header { padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
-  header .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px;
-    background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
-  header .badge.warn { color: var(--warn); border-color: var(--warn); }
-  header .badge.ok { color: var(--ok); border-color: var(--ok); }
-  header .meta { margin-left: auto; color: var(--muted); font-size: 12px; }
-  main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; }
-  @media (max-width: 920px) { main { grid-template-columns: 1fr; } }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-    display: flex; flex-direction: column; min-height: 120px; overflow: hidden; }
-  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
-    margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--panel-2);
-    display: flex; align-items: center; gap: 8px; }
-  .panel h2 .hint { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
-  .panel .body { padding: 12px 14px; overflow: auto; flex: 1; }
-  textarea { width: 100%; min-height: 90px; resize: vertical; background: var(--bg);
-    color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
-    font-family: var(--mono); font-size: 13px; }
-  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  button { background: var(--accent); color: #fff; border: none; border-radius: 6px;
-    padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500; }
-  button:hover { filter: brightness(1.1); }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.secondary { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
-  button.danger { background: var(--err); }
-  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; font-size: 13px; }
-  .kv dt { color: var(--muted); }
-  .kv dd { margin: 0; word-break: break-word; font-family: var(--mono); }
-  .state { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
-    font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-  .state.created, .state.context_ready { background: var(--panel-2); color: var(--muted); }
-  .state.planning, .state.plan_ready, .state.recovering { background: #2a2540; color: #b9a8ff; }
-  .state.executing, .state.verifying { background: #1f3a2e; color: var(--accent-2); }
-  .state.completed { background: #143022; color: var(--ok); }
-  .state.failed { background: #3a1f1f; color: var(--err); }
-  .state.cancelled { background: #2a2a2a; color: var(--muted); }
-  #events { font-family: var(--mono); font-size: 12px; line-height: 1.5; max-height: 52vh; }
-  .ev { display: grid; grid-template-columns: 70px 150px 1fr; gap: 8px; padding: 3px 0;
-    border-bottom: 1px solid rgba(255,255,255,.04); }
-  .ev .t { color: var(--muted); }
-  .ev .ty { color: var(--accent); font-weight: 600; }
-  .ev .d { color: var(--fg); word-break: break-word; white-space: pre-wrap; }
-  .ev.task_completed .ty, .ev.task_state_changed .ty { color: var(--accent-2); }
-  .ev.task_failed .ty, .ev.repair_failed .ty { color: var(--err); }
-  .ev.task_cancelled .ty { color: var(--warn); }
-  #agent-output { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
-  .tools .tool { display: grid; grid-template-columns: 140px 70px 70px 1fr; gap: 8px;
-    padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px; font-family: var(--mono); }
-  .tools .tool .ok { color: var(--ok); } .tools .tool .bad { color: var(--err); }
-  .fail-box { background: #2a1a1a; border: 1px solid var(--err); border-radius: 6px; padding: 10px; }
-  .fail-box .cls { color: var(--err); font-weight: 600; }
-  .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
-  .err-line { color: var(--err); font-family: var(--mono); font-size: 12px; }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+::selection { background: var(--accent-soft); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-2); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; border-radius: 4px; }
+
+/* ============================================================
+   APP SHELL
+   ============================================================ */
+.app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100dvh; width: 100vw; overflow: hidden; }
+.app.no-sidebar { grid-template-columns: 0 1fr; }
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  background: var(--bg-elev); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; min-width: 0;
+  transition: transform .26s var(--ease), width .26s var(--ease);
+  overflow: hidden;
+}
+.brand {
+  display: flex; align-items: center; gap: 10px; padding: 16px 16px 12px;
+  font-weight: 700; font-size: 15px; letter-spacing: -.01em;
+}
+.brand .bolt {
+  width: 28px; height: 28px; border-radius: 8px; flex: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center; color: #fff; box-shadow: 0 0 14px var(--accent-soft);
+  font-size: 16px;
+}
+.brand .name { display: flex; flex-direction: column; line-height: 1.1; }
+.brand .name small { font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; }
+.sidebar-search { padding: 0 12px 10px; position: relative; }
+.sidebar-search input {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 10px 8px 32px; font-size: 13px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.sidebar-search input:focus { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sidebar-search .ico { position: absolute; left: 22px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+
+.new-chat-btn {
+  margin: 0 12px 8px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--accent-soft); color: var(--accent-2); border: 1px dashed var(--accent-line);
+  border-radius: var(--radius-sm); padding: 9px; font-size: 13px; font-weight: 600;
+  transition: background .15s, border-color .15s;
+}
+.new-chat-btn:hover { background: var(--accent-line); }
+
+.nav { padding: 4px 8px; display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm);
+  color: var(--fg-2); font-size: 13px; font-weight: 500; transition: background .12s, color .12s;
+}
+.nav-item:hover { background: var(--surface); color: var(--fg); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent-2); }
+.nav-item .ico { width: 18px; flex: none; opacity: .8; }
+.nav-section-title {
+  padding: 16px 14px 6px; font-size: 11px; font-weight: 600; color: var(--muted-2);
+  text-transform: uppercase; letter-spacing: .08em; display: flex; align-items: center; justify-content: space-between;
+}
+.nav-section-title .count { font-size: 10px; background: var(--surface-2); padding: 1px 7px; border-radius: 10px; }
+
+.conv-list { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+.conv-item {
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm);
+  color: var(--fg-2); cursor: pointer; transition: background .12s; position: relative; min-width: 0;
+}
+.conv-item:hover { background: var(--surface); }
+.conv-item.active { background: var(--surface-2); color: var(--fg); }
+.conv-item.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent); }
+.conv-item .ci-body { flex: 1; min-width: 0; }
+.conv-item .ci-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-item .ci-meta { font-size: 11px; color: var(--muted-2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-item .ci-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 6px; background: var(--muted-2); }
+.conv-item .ci-dot.running { background: var(--ok); animation: pulse 1.6s infinite; }
+.conv-item .ci-dot.failed { background: var(--err); }
+.conv-item .ci-dot.completed { background: var(--accent-2); }
+.conv-item .ctx-btn { opacity: 0; flex: none; padding: 2px; color: var(--muted); border-radius: 4px; transition: opacity .12s; }
+.conv-item:hover .ctx-btn { opacity: 1; }
+.conv-item .ctx-btn:hover { background: var(--surface-3); color: var(--fg); }
+
+.sidebar-foot { padding: 8px; border-top: 1px solid var(--border); }
+.health-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; color: var(--muted); }
+.health-row .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.health-row .dot.ok { background: var(--ok); }
+.health-row .dot.warn { background: var(--warn); }
+.health-row .dot.bad { background: var(--err); }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ---------- Main area ---------- */
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); background: var(--bg-elev); min-height: 56px; flex: none;
+}
+.topbar .menu-btn { display: none; }
+.topbar .tb-title { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.topbar .tb-title h1 { margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar .tb-title .sub { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.topbar .tb-actions { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+  width: 34px; height: 34px; border-radius: var(--radius-sm); display: grid; place-items: center;
+  color: var(--fg-2); transition: background .12s, color .12s;
+}
+.icon-btn:hover { background: var(--surface); color: var(--fg); }
+.agent-status-pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px; background: var(--surface-2); color: var(--fg-2);
+}
+.agent-status-pill .dot { width: 7px; height: 7px; border-radius: 50%; }
+.agent-status-pill[data-state="idle"] .dot { background: var(--muted); }
+.agent-status-pill[data-state="thinking"], .agent-status-pill[data-state="planning"] { color: #b9a8ff; }
+.agent-status-pill[data-state="thinking"] .dot, .agent-status-pill[data-state="planning"] .dot { background: #b9a8ff; animation: pulse 1.4s infinite; }
+.agent-status-pill[data-state="working"], .agent-status-pill[data-state="verifying"] { color: var(--ok); }
+.agent-status-pill[data-state="working"] .dot, .agent-status-pill[data-state="verifying"] .dot { background: var(--ok); animation: pulse 1.4s infinite; }
+.agent-status-pill[data-state="completed"] .dot { background: var(--accent-2); }
+.agent-status-pill[data-state="failed"] { color: var(--err); }
+.agent-status-pill[data-state="failed"] .dot { background: var(--err); }
+.agent-status-pill[data-state="waiting"] { color: var(--warn); }
+.agent-status-pill[data-state="waiting"] .dot { background: var(--warn); animation: pulse 1.4s infinite; }
+
+.content { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
+.view { display: none; height: 100%; }
+.view.active { display: flex; flex-direction: column; }
+
+/* ============================================================
+   HOME
+   ============================================================ */
+.home-view { padding: 0; }
+.home-wrap {
+  max-width: 860px; margin: 0 auto; padding: clamp(24px, 7vh, 72px) 20px 40px;
+  display: flex; flex-direction: column; gap: 28px; width: 100%;
+}
+.home-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.home-hero .bolt-lg {
+  width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center; color: #fff; font-size: 30px; margin-bottom: 10px;
+  box-shadow: 0 0 40px var(--accent-soft);
+}
+.home-hero h2 { margin: 4px 0 0; font-size: clamp(22px, 4vw, 30px); font-weight: 700; letter-spacing: -.02em; }
+.home-hero p { margin: 0; color: var(--muted); font-size: 15px; }
+.home-suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.suggestion-chip {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  padding: 8px 14px; font-size: 13px; color: var(--fg-2); transition: all .15s var(--ease);
+}
+.suggestion-chip:hover { border-color: var(--accent-line); color: var(--accent-2); transform: translateY(-1px); }
+.home-section { display: flex; flex-direction: column; gap: 10px; }
+.home-section-head { display: flex; align-items: center; justify-content: space-between; }
+.home-section-head h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.home-section-head a { font-size: 12px; color: var(--accent-2); text-decoration: none; }
+.home-section-head a:hover { text-decoration: underline; }
+.empty-strip { color: var(--muted); font-size: 13px; padding: 14px; text-align: center; background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius-sm); }
+
+/* ============================================================
+   CHAT
+   ============================================================ */
+.chat-view { height: 100%; }
+.chat-scroll { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+.chat-messages { max-width: var(--chat-max); margin: 0 auto; padding: 24px 20px 140px; display: flex; flex-direction: column; gap: 20px; }
+.chat-empty { max-width: var(--chat-max); margin: auto; padding: 40px 20px; text-align: center; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 14px; min-height: 60vh; justify-content: center; }
+.chat-empty .bolt { width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #fff; font-size: 26px; box-shadow: 0 0 30px var(--accent-soft); }
+.chat-empty h3 { margin: 0; font-size: 18px; color: var(--fg); }
+.chat-empty p { margin: 0; font-size: 14px; max-width: 380px; }
+
+.msg { display: flex; gap: 12px; max-width: 100%; animation: msgIn .28s var(--ease-out); }
+@keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.msg.user { flex-direction: row-reverse; }
+.msg .avatar { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center; font-size: 14px; }
+.msg.agent .avatar { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+.msg.user .avatar { background: var(--surface-3); color: var(--fg-2); }
+.msg .bubble-wrap { min-width: 0; max-width: calc(100% - 42px); display: flex; flex-direction: column; }
+.msg.user .bubble-wrap { align-items: flex-end; }
+.msg .bubble {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 11px 15px; font-size: 14px; line-height: 1.6; word-break: break-word; overflow-wrap: anywhere;
+}
+.msg.user .bubble { background: var(--accent-soft); border-color: var(--accent-line); }
+.msg.agent .bubble { background: transparent; border: none; padding: 0; }
+.msg .bubble .md { min-width: 0; }
+.msg .msg-meta { font-size: 11px; color: var(--muted-2); margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.msg.user .msg-meta { justify-content: flex-end; }
+.msg .msg-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.msg:hover .msg-actions { opacity: 1; }
+.msg .msg-actions button { padding: 2px 6px; font-size: 11px; color: var(--muted); border-radius: 4px; }
+.msg .msg-actions button:hover { background: var(--surface-2); color: var(--fg); }
+
+/* Markdown */
+.md p { margin: 0 0 10px; }
+.md p:last-child { margin-bottom: 0; }
+.md h1,.md h2,.md h3 { margin: 16px 0 8px; font-weight: 600; line-height: 1.3; }
+.md h1 { font-size: 18px; } .md h2 { font-size: 16px; } .md h3 { font-size: 15px; }
+.md ul,.md ol { margin: 6px 0 10px; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md code:not(pre code) { background: var(--surface-3); padding: 2px 6px; border-radius: 5px; font-family: var(--mono); font-size: 12.5px; }
+.md pre { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0; margin: 10px 0; overflow: hidden; }
+.md pre .code-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+.md pre .code-head .lang { font-family: var(--mono); }
+.md pre .code-head .copy-code { color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+.md pre .code-head .copy-code:hover { background: var(--surface-3); color: var(--fg); }
+.md pre code { display: block; padding: 12px 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; overflow-x: auto; white-space: pre; }
+.md a { color: var(--accent-2); text-decoration: none; } .md a:hover { text-decoration: underline; }
+.md blockquote { border-left: 3px solid var(--accent-line); margin: 8px 0; padding: 2px 12px; color: var(--fg-2); }
+.md table { border-collapse: collapse; margin: 10px 0; font-size: 13px; display: block; overflow-x: auto; }
+.md th,.md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.md th { background: var(--surface-2); font-weight: 600; }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+/* streaming caret */
+.stream-caret::after { content: "▋"; color: var(--accent-2); animation: caret 1s steps(2) infinite; margin-left: 1px; }
+@keyframes caret { 50% { opacity: 0; } }
+
+/* ---------- Agent plan / execution block ---------- */
+.agent-block {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0; margin: 4px 0; overflow: hidden; transition: border-color .2s;
+}
+.agent-block[data-state="working"] { border-color: var(--accent-line); }
+.agent-block-head {
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; user-select: none;
+}
+.agent-block-head .ab-icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; flex: none; font-size: 13px; }
+.agent-block[data-state="planning"] .ab-icon { background: rgba(185,168,255,.18); color: #b9a8ff; }
+.agent-block[data-state="working"] .ab-icon { background: var(--accent-soft); color: var(--accent-2); }
+.agent-block[data-state="completed"] .ab-icon { background: rgba(74,222,128,.15); color: var(--ok); }
+.agent-block[data-state="failed"] .ab-icon { background: rgba(248,113,113,.15); color: var(--err); }
+.agent-block-head .ab-title { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; }
+.agent-block-head .ab-progress { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.agent-block-head .chev { color: var(--muted); transition: transform .2s; }
+.agent-block.open .agent-block-head .chev { transform: rotate(90deg); }
+.agent-block-body { display: none; padding: 0 14px 12px; }
+.agent-block.open .agent-block-body { display: block; animation: msgIn .2s; }
+
+.plan-steps { display: flex; flex-direction: column; gap: 6px; }
+.plan-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
+.plan-step .ps-mark {
+  width: 18px; height: 18px; border-radius: 50%; flex: none; margin-top: 1px; border: 2px solid var(--border);
+  display: grid; place-items: center; font-size: 10px; color: transparent; transition: all .2s;
+}
+.plan-step.done .ps-mark { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+.plan-step.running .ps-mark { border-color: var(--accent-2); }
+.plan-step.running .ps-mark::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-2); animation: pulse 1.2s infinite; }
+.plan-step.failed .ps-mark { background: var(--err); border-color: var(--err); color: var(--bg); }
+.plan-step .ps-text { color: var(--fg-2); padding-top: 1px; }
+.plan-step.done .ps-text { color: var(--fg); }
+.plan-step.running .ps-text { color: var(--fg); font-weight: 500; }
+.plan-step.pending .ps-text { color: var(--muted); }
+.plan-step .ps-meta { font-size: 11px; color: var(--muted-2); }
+.plan-progress-bar { height: 4px; background: var(--surface-3); border-radius: 4px; overflow: hidden; margin: 8px 0 12px; }
+.plan-progress-bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 4px; transition: width .4s var(--ease); }
+
+/* ---------- Tool cards ---------- */
+.tool-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  margin: 8px 0; overflow: hidden; transition: border-color .2s;
+}
+.tool-card[data-status="running"] { border-color: var(--accent-line); }
+.tool-card[data-status="failed"] { border-color: rgba(248,113,113,.4); }
+.tool-card-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; }
+.tool-card-head .tc-icon { width: 26px; height: 26px; border-radius: 7px; flex: none; display: grid; place-items: center; font-size: 14px; background: var(--surface-2); }
+.tool-card-head .tc-name { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; }
+.tool-card-head .tc-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.tool-card-head .tc-status { width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 50%; font-size: 11px; }
+.tool-card[data-status="running"] .tc-status { background: var(--accent-soft); color: var(--accent-2); }
+.tool-card[data-status="running"] .tc-status::after { content: ""; width: 9px; height: 9px; border: 2px solid var(--accent-2); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.tool-card[data-status="ok"] .tc-status { background: rgba(74,222,128,.15); color: var(--ok); }
+.tool-card[data-status="ok"] .tc-status::after { content: "✓"; }
+.tool-card[data-status="failed"] .tc-status { background: rgba(248,113,113,.15); color: var(--err); }
+.tool-card[data-status="failed"] .tc-status::after { content: "!"; font-weight: 700; }
+.tool-card-head .tc-dur { font-size: 11px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.tool-card-head .chev { color: var(--muted); transition: transform .2s; font-size: 10px; }
+.tool-card.open .tool-card-head .chev { transform: rotate(90deg); }
+.tool-card-body { display: none; padding: 0 12px 10px; border-top: 1px solid var(--border-soft); }
+.tool-card.open .tool-card-body { display: block; }
+.tool-card-body .tc-detail { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; color: var(--fg-2); padding: 8px 0; max-height: 240px; overflow-y: auto; }
+.tool-card-actions { display: flex; gap: 6px; padding-bottom: 4px; }
+
+/* ---------- Approval card ---------- */
+.approval-card { background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.3); border-radius: var(--radius); padding: 14px; margin: 8px 0; }
+.approval-card .ac-head { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; color: var(--warn); margin-bottom: 6px; }
+.approval-card .ac-body { font-size: 13px; color: var(--fg-2); margin-bottom: 10px; }
+.approval-card .ac-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Error card ---------- */
+.error-card { background: rgba(248,113,113,.06); border: 1px solid rgba(248,113,113,.3); border-radius: var(--radius); padding: 14px; margin: 8px 0; }
+.error-card .ec-head { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; color: var(--err); margin-bottom: 6px; }
+.error-card .ec-body { font-size: 13px; color: var(--fg-2); margin-bottom: 10px; }
+.error-card details { margin-top: 8px; }
+.error-card details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.error-card details pre { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+
+/* ============================================================
+   COMPOSER
+   ============================================================ */
+.composer-wrap { flex: none; padding: 0 16px 16px; background: linear-gradient(var(--bg) 60%, transparent); }
+.composer {
+  max-width: var(--chat-max); margin: 0 auto; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); transition: border-color .15s, box-shadow .15s;
+  box-shadow: var(--shadow-sm);
+}
+.composer:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.composer.attachments { border-radius: var(--radius); }
+.composer-attachments { padding: 10px 12px 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.att-chip {
+  display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; max-width: 220px;
+}
+.att-chip .att-ico { font-size: 16px; flex: none; }
+.att-chip .att-body { min-width: 0; }
+.att-chip .att-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.att-chip .att-size { color: var(--muted); font-size: 10px; }
+.att-chip .att-rm { color: var(--muted); padding: 0 2px; }
+.att-chip .att-rm:hover { color: var(--err); }
+.composer-area { padding: 12px 14px 4px; }
+.composer textarea {
+  width: 100%; background: transparent; border: none; outline: none; resize: none;
+  font-size: 15px; line-height: 1.5; max-height: 200px; min-height: 24px; color: var(--fg); display: block;
+}
+.composer textarea::placeholder { color: var(--muted-2); }
+.composer-bar { display: flex; align-items: center; gap: 6px; padding: 6px 10px 10px; }
+.composer-bar .cb-left, .composer-bar .cb-right { display: flex; align-items: center; gap: 4px; }
+.composer-bar .cb-right { margin-left: auto; }
+.cb-btn {
+  width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--muted);
+  transition: background .12s, color .12s; font-size: 15px;
+}
+.cb-btn:hover { background: var(--surface-2); color: var(--fg); }
+.cb-btn.active { background: var(--accent-soft); color: var(--accent-2); }
+.cb-label {
+  display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px;
+  font-size: 12px; color: var(--fg-2); transition: background .12s;
+}
+.cb-label:hover { background: var(--surface-2); }
+.cb-label .chev { font-size: 9px; color: var(--muted); }
+.send-btn {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #fff;
+  display: grid; place-items: center; transition: all .15s var(--ease); font-size: 16px;
+}
+.send-btn:hover { background: var(--accent-2); transform: scale(1.04); }
+.send-btn:disabled { background: var(--surface-3); color: var(--muted); transform: none; cursor: not-allowed; }
+.send-btn.stop { background: var(--err); }
+.composer-hint { text-align: center; font-size: 11px; color: var(--muted-2); padding: 4px 0 0; }
+
+.scroll-bottom-btn {
+  position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%) translateY(8px);
+  width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border);
+  display: grid; place-items: center; color: var(--fg-2); box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s; z-index: 5;
+}
+.scroll-bottom-btn.show { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+
+/* ============================================================
+   DRAWERS / MODALS / SHEETS
+   ============================================================ */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(2px); z-index: 90; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.overlay.show { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 90vw); background: var(--bg-elev);
+  border-left: 1px solid var(--border); z-index: 100; transform: translateX(100%); transition: transform .28s var(--ease);
+  display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
+}
+.drawer.show { transform: none; }
+.drawer-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.drawer-head h3 { margin: 0; font-size: 14px; flex: 1; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 16px; }
+.drawer-section { margin-bottom: 20px; }
+.drawer-section h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.kv-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+.kv-list dt { color: var(--muted); }
+.kv-list dd { margin: 0; word-break: break-word; font-variant-numeric: tabular-nums; }
+
+.drawer-evt-log { font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }
+.drawer-evt-log .ev-row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; padding: 2px 0; border-bottom: 1px solid var(--border-soft); }
+.drawer-evt-log .ev-row .t { color: var(--muted-2); }
+.drawer-evt-log .ev-row .ty { color: var(--accent-2); font-weight: 600; }
+.drawer-evt-log .ev-row.task_failed .ty, .drawer-evt-log .ev-row.repair_failed .ty { color: var(--err); }
+.drawer-evt-log .ev-row.task_completed .ty { color: var(--ok); }
+
+/* Bottom sheet (mobile) */
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; max-height: 90vh; background: var(--bg-elev);
+  border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; z-index: 100;
+  transform: translateY(100%); transition: transform .3s var(--ease); display: flex; flex-direction: column;
+}
+.sheet.show { transform: none; }
+.sheet .grab { width: 40px; height: 4px; background: var(--surface-3); border-radius: 4px; margin: 8px auto; }
+
+/* Modal */
+.modal { position: fixed; inset: 0; z-index: 110; display: none; align-items: center; justify-content: center; padding: 20px; }
+.modal.show { display: flex; }
+.modal-box { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-lg); width: min(520px, 94vw); max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-lg); animation: msgIn .25s var(--ease-out); }
+.modal-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.modal-head h3 { margin: 0; font-size: 15px; flex: 1; }
+.modal-body { padding: 16px 18px; }
+.modal-foot { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Command palette */
+.palette { position: fixed; inset: 0; z-index: 120; display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; }
+.palette.show { display: flex; }
+.palette-box { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); width: min(560px, 94vw); box-shadow: var(--shadow-lg); overflow: hidden; animation: msgIn .2s; }
+.palette-input { width: 100%; background: transparent; border: none; outline: none; padding: 14px 18px; font-size: 15px; border-bottom: 1px solid var(--border); }
+.palette-results { max-height: 50vh; overflow-y: auto; padding: 6px; }
+.palette-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; }
+.palette-item:hover, .palette-item.sel { background: var(--surface-2); }
+.palette-item .pi-ico { width: 24px; color: var(--muted); text-align: center; }
+.palette-item .pi-body { flex: 1; min-width: 0; }
+.palette-item .pi-title { font-size: 13px; }
+.palette-item .pi-sub { font-size: 11px; color: var(--muted); }
+.palette-item .pi-kbd { font-size: 10px; color: var(--muted-2); }
+
+/* Toast */
+.toast-wrap { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; box-shadow: var(--shadow); animation: msgIn .2s; max-width: 320px; }
+.toast.ok { border-color: rgba(74,222,128,.4); } .toast.err { border-color: rgba(248,113,113,.4); }
+
+/* ============================================================
+   GENERIC UI
+   ============================================================ */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; transition: all .12s; background: var(--surface-2); color: var(--fg-2); border: 1px solid var(--border); }
+.btn:hover { background: var(--surface-3); color: var(--fg); }
+.btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.btn.primary:hover { background: var(--accent-2); }
+.btn.danger { background: rgba(248,113,113,.12); color: var(--err); border-color: rgba(248,113,113,.3); }
+.btn.danger:hover { background: var(--err); color: #fff; }
+.btn.sm { padding: 4px 10px; font-size: 12px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.page-view { padding: 0; }
+.page-wrap { max-width: 920px; margin: 0 auto; padding: 28px 20px 60px; width: 100%; display: flex; flex-direction: column; gap: 20px; }
+.page-head h2 { margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.page-head p { margin: 0; color: var(--muted); font-size: 14px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; transition: border-color .15s, transform .15s; display: flex; flex-direction: column; gap: 8px; }
+.card:hover { border-color: var(--accent-line); transform: translateY(-2px); }
+.card-head { display: flex; align-items: center; gap: 10px; }
+.card-head .c-ico { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-2); display: grid; place-items: center; font-size: 18px; flex: none; }
+.card-head .c-title { font-weight: 600; font-size: 14px; }
+.card-head .c-sub { font-size: 12px; color: var(--muted); }
+.card .c-body { font-size: 13px; color: var(--fg-2); }
+.card .c-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: var(--surface-2); color: var(--fg-2); border: 1px solid var(--border); }
+.card .c-actions { display: flex; gap: 6px; margin-top: 4px; }
+.status-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.status-pill.on { background: rgba(74,222,128,.12); color: var(--ok); }
+.status-pill.off { background: var(--surface-3); color: var(--muted); }
+.status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-pill.on .dot { animation: pulse 1.6s infinite; }
+
+.form-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.form-row label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.form-row input, .form-row textarea, .form-row select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; font-size: 14px; outline: none; transition: border-color .15s; }
+.form-row input:focus, .form-row textarea:focus, .form-row select:focus { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.form-row textarea { resize: vertical; min-height: 80px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.toggle input { display: none; }
+.toggle .track { width: 38px; height: 22px; border-radius: 20px; background: var(--surface-3); position: relative; transition: background .2s; }
+.toggle .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--fg-2); transition: transform .2s; }
+.toggle input:checked + .track { background: var(--accent); }
+.toggle input:checked + .track::after { transform: translateX(16px); background: #fff; }
+
+.settings-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
+.settings-section h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+.settings-row:last-child { border-bottom: none; }
+.settings-row .sr-label { font-size: 13px; }
+.settings-row .sr-sub { font-size: 11px; color: var(--muted); }
+
+.kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; }
+
+.run-history-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+.run-history-row:last-child { border-bottom: none; }
+.run-history-row .rh-status { width: 22px; text-align: center; }
+.run-history-row .rh-status.ok { color: var(--ok); } .run-history-row .rh-status.warn { color: var(--warn); } .run-history-row .rh-status.err { color: var(--err); }
+
+.hidden { display: none !important; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+.mobile-overlay { display: none; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); z-index: 95;
+    transform: translateX(-100%); box-shadow: var(--shadow-lg);
+  }
+  .app.sidebar-open .sidebar { transform: none; }
+  .mobile-overlay { display: block; }
+  .topbar .menu-btn { display: grid; }
+  .chat-messages { padding: 16px 14px 130px; }
+  .home-wrap { padding: 28px 16px 30px; gap: 22px; }
+  .composer-wrap { padding: 0 10px 10px; }
+}
+@media (max-width: 480px) {
+  .msg .bubble { font-size: 14px; }
+  .drawer { width: 100vw; }
+}
 </style>
 </head>
 <body>
-<header>
-  <h1>KINETIC Web Agent Test Console</h1>
-  <span class="badge" id="backend-badge">backend: ?</span>
-  <span class="badge" id="key-badge">API key: ?</span>
-  <span class="meta" id="ws-info">workspace: —</span>
-</header>
+<div class="app" id="app">
 
-<main>
-  <section class="panel">
-    <h2>Task Composer</h2>
-    <div class="body">
-      <textarea id="prompt" placeholder="Describe the coding task for the agent…"></textarea>
-      <div class="row">
-        <button id="start-btn">Start Task</button>
-        <button id="cancel-btn" class="danger" disabled>Cancel Task</button>
-        <button id="clear-btn" class="secondary">Clear</button>
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar" id="sidebar" aria-label="Thanh điều hướng">
+    <div class="brand">
+      <div class="bolt">⚡</div>
+      <div class="name">KINETIC<small>AI Agent</small></div>
+    </div>
+    <div class="sidebar-search">
+      <span class="ico">⌕</span>
+      <input id="conv-search" type="search" placeholder="Tìm đoạn chat…" aria-label="Tìm đoạn chat" />
+    </div>
+    <button class="new-chat-btn" id="new-chat-btn">＋ Đoạn chat mới</button>
+    <nav class="nav">
+      <a class="nav-item active" data-view="home"><span class="ico">⌂</span> Trang chủ</a>
+      <a class="nav-item" data-view="agents"><span class="ico">♙</span> Agents</a>
+      <a class="nav-item" data-view="automations"><span class="ico">⚙</span> Automations</a>
+      <a class="nav-item" data-view="files"><span class="ico">◫</span> Files</a>
+      <a class="nav-item" data-view="settings"><span class="ico">⚙</span> Cài đặt</a>
+    </nav>
+    <div class="nav-section-title"><span>Đoạn chat gần đây</span><span class="count" id="conv-count">0</span></div>
+    <div class="conv-list" id="conv-list"></div>
+    <div class="sidebar-foot">
+      <div class="health-row" id="health-row"><span class="dot warn"></span><span id="health-text">Đang kiểm tra…</span></div>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <div class="main">
+    <header class="topbar" id="topbar">
+      <button class="icon-btn menu-btn" id="menu-btn" aria-label="Mở menu">☰</button>
+      <div class="tb-title">
+        <h1 id="tb-title">KINETIC</h1>
+        <div class="sub" id="tb-sub"><span class="agent-status-pill" data-state="idle"><span class="dot"></span>Ready</span></div>
       </div>
-      <div id="composer-error" class="err-line" style="margin-top:8px"></div>
+      <div class="tb-actions">
+        <button class="icon-btn" id="cmdk-btn" title="Tìm kiếm (⌘K)" aria-label="Tìm kiếm">⌕</button>
+        <button class="icon-btn" id="activity-btn" title="Hoạt động" aria-label="Hoạt động">≡</button>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+
+      <!-- ===== HOME ===== -->
+      <section class="view home-view active" id="view-home">
+        <div class="home-wrap">
+          <div class="home-hero">
+            <div class="bolt-lg">⚡</div>
+            <h2>Chào bạn 👋</h2>
+            <p>Mình là KINETIC. Bạn muốn mình làm gì hôm nay?</p>
+          </div>
+          <div class="composer-wrap" style="padding:0">
+            <div class="composer" id="home-composer">
+              <div class="composer-area"><textarea id="home-prompt" placeholder="Bạn muốn KINETIC làm gì?" rows="1"></textarea></div>
+              <div class="composer-bar">
+                <div class="cb-left">
+                  <button class="cb-btn" id="home-attach" title="Đính kèm" aria-label="Đính kèm file">＋</button>
+                  <button class="cb-label" id="home-tools-btn">Tools <span class="chev">▾</span></button>
+                  <button class="cb-label" id="home-model-btn">Sonnet 5 <span class="chev">▾</span></button>
+                </div>
+                <div class="cb-right">
+                  <button class="send-btn" id="home-send" aria-label="Gửi">↑</button>
+                </div>
+              </div>
+            </div>
+            <div class="composer-hint">Enter để gửi · Shift+Enter để xuống dòng</div>
+          </div>
+          <div class="home-suggestions">
+            <button class="suggestion-chip" data-suggest="Nghiên cứu">Nghiên cứu</button>
+            <button class="suggestion-chip" data-suggest="Phân tích file">Phân tích file</button>
+            <button class="suggestion-chip" data-suggest="Xây dựng">Xây dựng</button>
+            <button class="suggestion-chip" data-suggest="Tự động hoá">Tự động hoá</button>
+          </div>
+          <div class="home-section">
+            <div class="home-section-head"><h3>Automations</h3><a data-view="automations">Xem tất cả →</a></div>
+            <div id="home-automations"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CHAT ===== -->
+      <section class="view chat-view" id="view-chat">
+        <div class="chat-scroll" id="chat-scroll">
+          <div class="chat-messages" id="chat-messages"></div>
+        </div>
+        <div class="scroll-bottom-btn" id="scroll-bottom-btn" title="Cuộn xuống" aria-label="Cuộn xuống">↓</div>
+        <div class="composer-wrap">
+          <div class="composer" id="chat-composer">
+            <div class="composer-attachments hidden" id="composer-attachments"></div>
+            <div class="composer-area"><textarea id="chat-prompt" placeholder="Nhắn tin cho KINETIC…" rows="1"></textarea></div>
+            <div class="composer-bar">
+              <div class="cb-left">
+                <button class="cb-btn" id="chat-attach" title="Đính kèm" aria-label="Đính kèm file">＋</button>
+                <button class="cb-label" id="chat-tools-btn">Tools <span class="chev">▾</span></button>
+                <button class="cb-label" id="chat-model-btn">Sonnet 5 <span class="chev">▾</span></button>
+              </div>
+              <div class="cb-right">
+                <button class="send-btn" id="chat-send" aria-label="Gửi">↑</button>
+              </div>
+            </div>
+          </div>
+          <div class="composer-hint">Enter để gửi · Shift+Enter để xuống dòng · Kéo thả file để đính kèm</div>
+        </div>
+      </section>
+
+      <!-- ===== AGENTS ===== -->
+      <section class="view page-view" id="view-agents">
+        <div class="page-wrap">
+          <div class="page-head"><div><h2>Agents</h2><p>Quản lý các agent và cấu hình năng lực.</p></div>
+            <button class="btn primary" id="add-agent-btn">＋ Agent mới</button></div>
+          <div class="card-grid" id="agents-grid"></div>
+        </div>
+      </section>
+
+      <!-- ===== AUTOMATIONS ===== -->
+      <section class="view page-view" id="view-automations">
+        <div class="page-wrap">
+          <div class="page-head"><div><h2>Automations</h2><p>Lịch trình tác vụ tự động chạy định kỳ.</p></div>
+            <button class="btn primary" id="add-automation-btn">＋ Tự động hoá</button></div>
+          <div class="card-grid" id="automations-grid"></div>
+        </div>
+      </section>
+
+      <!-- ===== FILES ===== -->
+      <section class="view page-view" id="view-files">
+        <div class="page-wrap">
+          <div class="page-head"><div><h2>Files</h2><p>Tài liệu bạn đã tải lên hoặc agent đã tạo.</p></div>
+            <button class="btn primary" id="upload-file-btn">⬆ Tải lên</button></div>
+          <input type="file" id="file-input" multiple class="hidden" />
+          <div class="card-grid" id="files-grid"></div>
+        </div>
+      </section>
+
+      <!-- ===== SETTINGS ===== -->
+      <section class="view page-view" id="view-settings">
+        <div class="page-wrap">
+          <div class="page-head"><div><h2>Cài đặt</h2><p>Tuỳ chỉnh KINETIC theo ý bạn.</p></div></div>
+          <div class="settings-section"><h3>Giao diện</h3>
+            <div class="settings-row"><div><div class="sr-label">Chủ đề tối</div><div class="sr-sub">Tự động theo hệ thống</div></div>
+              <label class="toggle"><input type="checkbox" id="set-dark" checked /><span class="track"></span></label></div>
+            <div class="settings-row"><div><div class="sr-label">Hiệu ứng chuyển động</div><div class="sr-sub">Animation khi agent hoạt động</div></div>
+              <label class="toggle"><input type="checkbox" id="set-anim" checked /><span class="track"></span></label></div>
+          </div>
+          <div class="settings-section"><h3>Mô hình</h3>
+            <div class="settings-row"><div class="sr-label">Mô hình mặc định</div><select id="set-model" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;"><option>Sonnet 5</option><option>Haiku</option><option>Opus</option><option>Auto</option></select></div>
+            <div class="settings-row"><div class="sr-label">Cho phép repair tự động</div><label class="toggle"><input type="checkbox" id="set-repair" /><span class="track"></span></label></div>
+          </div>
+          <div class="settings-section"><h3>Bảo mật & API</h3>
+            <div class="settings-row"><div><div class="sr-label">API key</div><div class="sr-sub" id="set-key-status">—</div></div>
+              <button class="btn sm" id="set-key-btn">Cập nhật</button></div>
+            <div class="settings-row"><div><div class="sr-label">Che giấu giá trị nhạy cảm</div><div class="sr-sub">Tự động mask secrets</div></div>
+              <label class="toggle"><input type="checkbox" checked disabled /><span class="track"></span></label></div>
+          </div>
+          <div class="settings-section"><h3>Phím tắt</h3>
+            <div class="settings-row"><div class="sr-label">Tìm kiếm / lệnh</div><span class="kbd">⌘ K</span></div>
+            <div class="settings-row"><div class="sr-label">Đoạn chat mới</div><span class="kbd">⌘ ⇧ O</span></div>
+            <div class="settings-row"><div class="sr-label">Gửi tin nhắn</div><span class="kbd">Enter</span></div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+
+  <!-- mobile overlay -->
+  <div class="overlay mobile-overlay" id="mobile-overlay"></div>
+
+  <!-- Activity drawer -->
+  <div class="overlay" id="drawer-overlay"></div>
+  <aside class="drawer" id="activity-drawer" aria-label="Hoạt động agent">
+    <div class="drawer-head"><h3 id="drawer-title">Hoạt động KINETIC</h3><button class="icon-btn" id="drawer-close">✕</button></div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <!-- Modal root -->
+  <div class="modal" id="modal"><div class="modal-box" id="modal-box"></div></div>
+
+  <!-- Command palette -->
+  <div class="palette" id="palette">
+    <div class="palette-box">
+      <input class="palette-input" id="palette-input" placeholder="Tìm lệnh, đoạn chat, file…" />
+      <div class="palette-results" id="palette-results"></div>
     </div>
-  </section>
+  </div>
 
-  <section class="panel">
-    <h2>Task Status</h2>
-    <div class="body">
-      <dl class="kv" id="status-kv">
-        <dt>Task ID</dt><dd id="s-id">—</dd>
-        <dt>State</dt><dd id="s-state">—</dd>
-        <dt>Current step</dt><dd id="s-step">—</dd>
-        <dt>Attempts</dt><dd id="s-attempts">—</dd>
-        <dt>Replans</dt><dd id="s-replans">—</dd>
-      </dl>
-    </div>
-  </section>
-
-  <section class="panel">
-    <h2>Live Event Console <span class="hint">SSE</span></h2>
-    <div class="body" id="events"><div class="empty">No events yet. Start a task.</div></div>
-  </section>
-
-  <section class="panel">
-    <h2>Agent Output</h2>
-    <div class="body" id="agent-output"><div class="empty">No agent output yet.</div></div>
-  </section>
-
-  <section class="panel">
-    <h2>Tool Activity</h2>
-    <div class="body tools" id="tools"><div class="empty">No tool activity yet.</div></div>
-  </section>
-
-  <section class="panel">
-    <h2>Failure / Recovery</h2>
-    <div class="body" id="failure"><div class="empty">No failures.</div></div>
-  </section>
-</main>
+  <!-- Toasts -->
+  <div class="toast-wrap" id="toasts"></div>
+</div>
 
 <script>
-const $ = (id) => document.getElementById(id);
-let currentTaskId = null;
-let eventSource = null;
-let pollTimer = null;
+/* ============================================================
+   KINETIC WEB APP — vanilla JS, module-structured
+   ============================================================ */
+"use strict";
 
-function fmtTime(iso) {
-  if (!iso) return '';
-  try { return new Date(iso).toLocaleTimeString([], {hour12:false}); }
-  catch { return iso; }
-}
+/* ---------- Utilities ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const uid = () => "c" + Math.random().toString(36).slice(2, 10);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+const fmtTime = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+const relTime = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso); const now = Date.now(); const diff = now - d.getTime();
+  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), day = Math.floor(diff / 86400000);
+  if (m < 1) return "vừa xong"; if (m < 60) return m + " phút trước";
+  if (h < 24) return h + " giờ trước"; if (day < 7) return day + " ngày trước";
+  return d.toLocaleDateString();
+};
+const fmtDur = (ms) => { if (!ms && ms !== 0) return ""; if (ms < 1000) return ms + "ms"; const s = ms / 1000; if (s < 60) return s.toFixed(1) + "s"; const m = Math.floor(s / 60); return m + "m " + Math.floor(s % 60) + "s"; };
+const toast = (msg, kind = "") => { const t = el("div", "toast " + kind, esc(msg)); $("#toasts").appendChild(t); setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, 3200); };
 
-function setErr(el, msg) { el.textContent = msg || ''; }
-
-async function checkHealth() {
-  try {
-    const r = await fetch('/api/health');
-    const d = await r.json();
-    $('backend-badge').textContent = 'backend: ' + (d.backend_ready ? 'ready' : 'closed');
-    $('backend-badge').className = 'badge ' + (d.backend_ready ? 'ok' : 'warn');
-    $('key-badge').textContent = 'API key: ' + (d.api_key_configured ? 'set' : 'missing');
-    $('key-badge').className = 'badge ' + (d.api_key_configured ? 'ok' : 'warn');
-    $('ws-info').textContent = 'workspace: ' + (d.workspace || '—');
-  } catch (e) {
-    $('backend-badge').textContent = 'backend: offline';
-    $('backend-badge').className = 'badge warn';
-  }
-}
-
-async function startTask() {
-  const prompt = $('prompt').value.trim();
-  setErr($('composer-error'), '');
-  if (!prompt) { setErr($('composer-error'), 'Prompt is required.'); return; }
-  $('start-btn').disabled = true;
-  try {
-    const r = await fetch('/api/tasks', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt}),
-    });
-    const d = await r.json();
-    if (!r.ok) { setErr($('composer-error'), d.error || ('HTTP ' + r.status)); return; }
-    currentTaskId = d.task_id;
-    $('cancel-btn').disabled = false;
-    refreshStatus();
-    openEventStream();
-  } catch (e) {
-    setErr($('composer-error'), 'Network error: ' + e.message);
-  } finally {
-    $('start-btn').disabled = false;
-  }
-}
-
-async function cancelTask() {
-  if (!currentTaskId) return;
-  try {
-    await fetch('/api/tasks/' + currentTaskId + '/cancel', {method: 'POST'});
-    refreshStatus();
-  } catch (e) { setErr($('composer-error'), 'Cancel failed: ' + e.message); }
-}
-
-function clearAll() {
-  $('prompt').value = '';
-  setErr($('composer-error'), '');
-  currentTaskId = null;
-  if (eventSource) { eventSource.close(); eventSource = null; }
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-  $('cancel-btn').disabled = true;
-  $('events').innerHTML = '<div class="empty">No events yet. Start a task.</div>';
-  $('agent-output').innerHTML = '<div class="empty">No agent output yet.</div>';
-  $('tools').innerHTML = '<div class="empty">No tool activity yet.</div>';
-  $('failure').innerHTML = '<div class="empty">No failures.</div>';
-  $('s-id').textContent = '—'; $('s-state').textContent = '—';
-  $('s-step').textContent = '—'; $('s-attempts').textContent = '—'; $('s-replans').textContent = '—';
-}
-
-function openEventStream() {
-  if (eventSource) eventSource.close();
-  const url = '/api/tasks/' + currentTaskId + '/events';
-  eventSource = new EventSource(url);
-  eventSource.onopen = () => appendEvent({type:'stream_open', timestamp:new Date().toISOString(), data:{}});
-  eventSource.onerror = () => { /* browser auto-reconnects */ };
-  eventSource.addEventListener('stream_end', (m) => {
-    appendEvent({type:'stream_end', timestamp:new Date().toISOString(), data:{}});
-    eventSource.close();
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(refreshStatus, 1500);
-    setTimeout(() => { if (pollTimer) clearInterval(pollTimer); }, 8000);
+/* ---------- Minimal Markdown renderer (safe) ---------- */
+function md(text) {
+  if (!text) return "";
+  let h = String(text);
+  // extract code blocks first
+  const blocks = [];
+  h = h.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const i = blocks.length; blocks.push({ lang: lang || "text", code });
+    return `\u0000BLOCK${i}\u0000`;
   });
-  // Listen to every named event.
-  const allTypes = [
-    'agent_started','agent_message','agent_error','tool_started','tool_output','tool_finished',
-    'command_started','command_finished','file_changed','test_started','test_finished',
-    'task_completed','project_scanned','workspace_created','workspace_deleted',
-    'git_command_started','git_command_finished','dependency_detected','dependency_install_started',
-    'dependency_install_finished','environment_created','environment_started','environment_stopped',
-    'environment_destroyed','environment_failed','process_started','process_finished',
-    'process_cancelled','process_timeout','permission_denied','memory_created','memory_updated',
-    'memory_deleted','memory_invalidated','memory_retrieved','memory_consolidated','context_built',
-    'context_budget_exceeded','task_created','task_state_changed','task_planning_started',
-    'task_plan_created','task_step_started','task_step_completed','task_step_failed',
-    'task_verification_started','task_verification_completed','task_recovery_started',
-    'task_recovery_completed','task_replanned','task_cancelled','task_failed',
-    'task_checkpoint_created','failure_analyzed','repair_started','repair_completed',
-    'repair_failed','verification_retry','stuck_detected','regression_detected',
-    'final_review_started','final_review_completed','message'
-  ];
-  allTypes.forEach((t) => {
-    eventSource.addEventListener(t, (m) => {
-      let data = {};
-      try { data = JSON.parse(m.data); } catch {}
-      appendEvent({type: t, timestamp: data.timestamp || new Date().toISOString(), data});
-      routeEvent(t, data);
-    });
+  h = esc(h);
+  h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
+  h = h.replace(/^### (.*)$/gm, "<h3>$1</h3>").replace(/^## (.*)$/gm, "<h2>$1</h2>").replace(/^# (.*)$/gm, "<h1>$1</h1>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // lists
+  h = h.replace(/(?:^|\n)((?:[-*] .*(?:\n|$))+)/g, (m, g) => "\n<ul>" + g.replace(/(?:^|\n)[-*] /g, "\n<li>").replace(/\n/g, "") + "</ul>");
+  h = h.replace(/(?:^|\n)((?:\d+\. .*(?:\n|$))+)/g, (m, g) => "\n<ol>" + g.replace(/(?:^|\n)\d+\. /g, "\n<li>").replace(/\n/g, "") + "</ol>");
+  h = h.replace(/<\/(ul|ol)>\s*<(ul|ol)>/g, "");
+  // blockquote
+  h = h.replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>");
+  // hr
+  h = h.replace(/^---$/gm, "<hr>");
+  // paragraphs
+  h = h.split(/\n{2,}/).map(p => {
+    p = p.trim();
+    if (!p) return "";
+    if (/^<(h\d|ul|ol|blockquote|pre|hr)/.test(p)) return p;
+    return "<p>" + p.replace(/\n/g, "<br>") + "</p>";
+  }).join("");
+  // restore code blocks
+  h = h.replace(/\u0000BLOCK(\d+)\u0000/g, (_, i) => {
+    const b = blocks[+i];
+    const head = `<div class="code-head"><span class="lang">${esc(b.lang)}</span><button class="copy-code" data-code="${encodeURIComponent(b.code)}">Sao chép</button></div>`;
+    return `<pre>${head}<code>${esc(b.code)}</code></pre>`;
   });
+  return h;
 }
 
-function appendEvent(ev) {
-  const box = $('events');
-  if (box.querySelector('.empty')) box.innerHTML = '';
-  const row = document.createElement('div');
-  row.className = 'ev ' + ev.type;
-  const dataStr = JSON.stringify(ev.data, null, 0);
-  row.innerHTML = '<span class="t">' + fmtTime(ev.timestamp) + '</span>' +
-    '<span class="ty">' + ev.type + '</span>' +
-    '<span class="d"></span>';
-  row.querySelector('.d').textContent = dataStr;
-  box.appendChild(row);
-  box.scrollTop = box.scrollHeight;
-}
+/* ============================================================
+   STATE
+   ============================================================ */
+const State = {
+  conversations: [],   // {id, title, messages:[], taskId, agentState, createdAt, updatedAt, plan, toolCalls, eventLog, pendingAttachments:[]}
+  activeId: null,
+  agents: [],
+  automations: [],
+  files: [],
+  settings: { dark: true, anim: true, model: "Sonnet 5", repair: false },
+  health: { backend: null, key: null, workspace: "" },
+};
 
-function routeEvent(type, data) {
-  if (type === 'agent_message' || type === 'agent_started') {
-    if (data.prompt || data.result || data.text) {
-      const out = $('agent-output');
-      if (out.querySelector('.empty')) out.innerHTML = '';
-      const line = document.createElement('div');
-      line.textContent = data.prompt || data.result || data.text || '';
-      out.appendChild(line);
-    }
-  } else if (type === 'tool_started' || type === 'tool_finished' || type === 'tool_output') {
-    addToolRow(data);
-  } else if (type === 'task_failed' || type === 'task_step_failed' || type === 'repair_failed') {
-    showFailure(data);
-  } else if (type === 'task_state_changed') {
-    refreshStatus();
+function loadPersisted() {
+  try {
+    const p = JSON.parse(localStorage.getItem("kinetic_state") || "{}");
+    if (p.conversations) State.conversations = p.conversations;
+    if (p.automations) State.automations = p.automations;
+    if (p.files) State.files = p.files;
+    if (p.settings) Object.assign(State.settings, p.settings);
+  } catch {}
+  // seed defaults if empty
+  if (State.agents.length === 0) {
+    State.agents = [
+      { id: "kinetic", name: "KINETIC", desc: "Agent AI đa năng", icon: "⚡", status: "active", model: "Sonnet 5",
+        tools: ["Web Search","Browser","Code","Files","Terminal","Knowledge","Notes"], system: "Bạn là KINETIC, một agent AI tự chủ. Hãy lập kế hoạch, dùng công cụ và hoàn thành tác vụ." },
+      { id: "researcher", name: "Researcher", desc: "Nghiên cứu & tổng hợp", icon: "🔍", status: "active", model: "Sonnet 5",
+        tools: ["Web Search","Browser","Knowledge","Notes"], system: "Agent chuyên nghiên cứu." },
+      { id: "builder", name: "Builder", desc: "Xây dựng & code", icon: "🔨", status: "inactive", model: "Opus",
+        tools: ["Code","Files","Terminal"], system: "Agent chuyên viết code." },
+    ];
+  }
+  if (State.automations.length === 0) {
+    State.automations = [
+      { id: uid(), name: "Daily AI briefing", enabled: true, schedule: "Every day · 08:00", cron: "0 8 * * *", agent: "kinetic",
+        prompt: "Tổng hợp tin AI nổi bật hôm nay.", tools: ["Web Search","Knowledge","Notes"], lastRun: { status: "ok", at: new Date(Date.now()-3600000*20).toISOString() }, nextRun: new Date(Date.now()+3600000*4).toISOString(), history: [
+          { status: "ok", at: new Date(Date.now()-3600000*20).toISOString() }, { status: "ok", at: new Date(Date.now()-86400000).toISOString() }, { status: "warn", at: new Date(Date.now()-86400000*2).toISOString() } ] },
+      { id: uid(), name: "Monitor GitHub PRs", enabled: true, schedule: "Every 30 min", cron: "*/30 * * * *", agent: "kinetic",
+        prompt: "Kiểm tra PR mới và báo cáo.", tools: ["Web Search","Notes"], lastRun: { status: "ok", at: new Date(Date.now()-600000*25).toISOString() }, nextRun: new Date(Date.now()+600000*5).toISOString(), history: [
+          { status: "ok", at: new Date(Date.now()-600000*25).toISOString() } ] },
+      { id: uid(), name: "Weekly research summary", enabled: false, schedule: "Monday · 09:00", cron: "0 9 * * 1", agent: "researcher",
+        prompt: "Tổng hợp nghiên cứu tuần.", tools: ["Knowledge","Notes"], lastRun: null, nextRun: null, history: [] },
+    ];
   }
 }
-
-function addToolRow(data) {
-  const box = $('tools');
-  if (box.querySelector('.empty')) box.innerHTML = '';
-  const name = data.tool || data.name || 'tool';
-  const status = data.status || (data.exit_code != null ? (data.exit_code === 0 ? 'ok' : 'fail') : '…');
-  const dur = data.duration_ms != null ? (data.duration_ms + 'ms') : '';
-  const summary = data.result || data.output || data.message || '';
-  const row = document.createElement('div');
-  row.className = 'tool';
-  row.innerHTML = '<span>' + name + '</span>' +
-    '<span class="' + (status === 'fail' ? 'bad' : (status === 'ok' ? 'ok' : '')) + '">' + status + '</span>' +
-    '<span>' + dur + '</span><span></span>';
-  row.querySelector('span:last-child').textContent = String(summary).slice(0, 200);
-  box.appendChild(row);
-  box.scrollTop = box.scrollHeight;
-}
-
-function showFailure(data) {
-  const box = $('failure');
-  box.innerHTML = '';
-  const div = document.createElement('div');
-  div.className = 'fail-box';
-  const cls = data.failure_class || data.class || 'failure';
-  const msg = data.message || data.reason || data.error || '';
-  div.innerHTML = '<div class="cls">' + cls + '</div><div class="msg"></div>';
-  div.querySelector('.msg').textContent = msg;
-  box.appendChild(div);
-}
-
-async function refreshStatus() {
-  if (!currentTaskId) return;
+function persist() {
   try {
-    const r = await fetch('/api/tasks/' + currentTaskId);
-    if (!r.ok) return;
-    const d = await r.json();
-    $('s-id').textContent = d.id || currentTaskId;
-    $('s-state').innerHTML = d.state ? '<span class="state ' + d.state + '">' + d.state + '</span>' : '—';
-    $('s-step').textContent = d.current_step || '—';
-    $('s-attempts').textContent = d.attempt_count != null ? d.attempt_count : '—';
-    $('s-replans').textContent = d.replan_count != null ? d.replan_count : '—';
-    if (d.failure) showFailure(d.failure);
-    const terminal = ['completed','failed','cancelled'].includes(d.state);
-    $('cancel-btn').disabled = terminal;
-    if (d.outcome && d.outcome.final_verification) {
-      const fv = d.outcome.final_verification;
-      const box = $('failure');
-      const note = document.createElement('div');
-      note.style.marginTop = '8px';
-      note.innerHTML = '<strong>Verification:</strong> <span></span>';
-      note.querySelector('span').textContent = fv.outcome + (fv.reason ? ' — ' + fv.reason : '');
-      box.appendChild(note);
-    }
+    localStorage.setItem("kinetic_state", JSON.stringify({
+      conversations: State.conversations.map(c => ({ ...c, messages: c.messages.map(m => ({ ...m, streaming: false })) })),
+      automations: State.automations, files: State.files, settings: State.settings,
+    }));
   } catch {}
 }
 
-$('start-btn').addEventListener('click', startTask);
-$('cancel-btn').addEventListener('click', cancelTask);
-$('clear-btn').addEventListener('click', clearAll);
-checkHealth();
-setInterval(checkHealth, 10000);
+/* ============================================================
+   API ADAPTER
+   ============================================================ */
+const API = {
+  async health() {
+    const r = await fetch("/api/health"); if (!r.ok) throw new Error("health"); return r.json();
+  },
+  async createTask(prompt) {
+    const r = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d;
+  },
+  async getTask(id) { const r = await fetch("/api/tasks/" + id); if (!r.ok) throw new Error("task"); return r.json(); },
+  async listTasks() { const r = await fetch("/api/tasks"); if (!r.ok) throw new Error("list"); return r.json(); },
+  async cancelTask(id) { const r = await fetch("/api/tasks/" + id + "/cancel", { method: "POST" }); return r.json(); },
+  async resumeTask(id) { const r = await fetch("/api/tasks/" + id + "/resume", { method: "POST" }); return r.json(); },
+  async outcome(id) { const r = await fetch("/api/tasks/" + id + "/outcome"); if (!r.ok) return null; return r.json(); },
+  events(id, onEvent, onEnd) {
+    const es = new EventSource("/api/tasks/" + id + "/events");
+    const TYPES = ["agent_started","agent_message","agent_error","tool_started","tool_output","tool_finished","command_started","command_finished","file_changed","test_started","test_finished","task_completed","project_scanned","workspace_created","workspace_deleted","git_command_started","git_command_finished","dependency_detected","dependency_install_started","dependency_install_finished","environment_created","environment_started","environment_stopped","environment_destroyed","environment_failed","process_started","process_finished","process_cancelled","process_timeout","permission_denied","memory_created","memory_updated","memory_deleted","memory_invalidated","memory_retrieved","memory_consolidated","context_built","context_budget_exceeded","task_created","task_state_changed","task_planning_started","task_plan_created","task_step_started","task_step_completed","task_step_failed","task_verification_started","task_verification_completed","task_recovery_started","task_recovery_completed","task_replanned","task_cancelled","task_failed","task_checkpoint_created","failure_analyzed","repair_started","repair_completed","repair_failed","verification_retry","stuck_detected","regression_detected","final_review_started","final_review_completed","message"];
+    TYPES.forEach(t => es.addEventListener(t, m => { let data = {}; try { data = JSON.parse(m.data); } catch {} onEvent(t, data); }));
+    es.addEventListener("stream_end", () => { try { es.close(); } catch {} onEnd && onEnd(); });
+    es.onerror = () => {}; // browser auto-reconnects
+    return es;
+  },
+};
+
+/* ============================================================
+   EVENT TYPES → STATE MAPPING
+   ============================================================ */
+const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+const STEP_EVENTS = new Set(["task_step_started", "task_step_completed", "task_step_failed"]);
+
+function deriveAgentState(conv) {
+  const s = (conv.taskSnapshot && conv.taskSnapshot.state) || "";
+  if (TERMINAL.has(s)) return s;
+  if (conv.planning) return "planning";
+  if (conv.toolRunning) return "working";
+  if (conv.thinking) return "thinking";
+  if (conv.waitingApproval) return "waiting";
+  return s === "executing" || s === "verifying" ? s : "idle";
+}
+
+/* ============================================================
+   CONVERSATIONS
+   ============================================================ */
+function newConversation(title = "Đoạn chat mới") {
+  const c = { id: uid(), title, messages: [], taskId: null, agentState: "idle", agentId: "kinetic",
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    plan: null, toolCalls: [], eventLog: [], thinking: false, planning: false, toolRunning: false, waitingApproval: false, attachments: [] };
+  State.conversations.unshift(c); State.activeId = c.id; persist();
+  renderSidebar(); showView("chat"); renderChat();
+  return c;
+}
+function getConv() { return State.conversations.find(c => c.id === State.activeId); }
+function renameConv(id, title) { const c = State.conversations.find(x => x.id === id); if (c) { c.title = title; c.updatedAt = new Date().toISOString(); persist(); renderSidebar(); if (id === State.activeId) updateTopbar(); } }
+function deleteConv(id) {
+  const idx = State.conversations.findIndex(c => c.id === id);
+  if (idx < 0) return;
+  State.conversations.splice(idx, 1);
+  if (State.activeId === id) State.activeId = State.conversations[0]?.id || null;
+  persist(); renderSidebar();
+  if (State.activeId) { showView("chat"); renderChat(); } else { showView("home"); }
+  toast("Đã xoá đoạn chat");
+}
+
+/* ============================================================
+   SEND MESSAGE / START TASK
+   ============================================================ */
+async function sendMessage(text) {
+  text = text.trim(); if (!text) return;
+  let conv = getConv();
+  if (!conv) conv = newConversation(text.slice(0, 40));
+  // user message
+  conv.messages.push({ id: uid(), role: "user", text, at: new Date().toISOString() });
+  conv.updatedAt = new Date().toISOString();
+  conv.attachments = (conv.attachments || []).slice();
+  // auto-title from first message
+  if (conv.messages.filter(m => m.role === "user").length === 1) conv.title = text.slice(0, 48);
+  conv.thinking = true; conv.agentState = "thinking";
+  persist(); renderSidebar(); renderChat();
+
+  // create assistant placeholder
+  const aMsg = { id: uid(), role: "agent", text: "", at: new Date().toISOString(), streaming: true, blocks: [] };
+  conv.messages.push(aMsg);
+
+  try {
+    const res = await API.createTask(text);
+    conv.taskId = res.task_id; conv.thinking = false; conv.planning = true; conv.agentState = "planning";
+    conv.eventLog = [];
+    renderChat(); renderSidebar();
+    openEventStream(conv);
+  } catch (e) {
+    conv.thinking = false; conv.agentState = "failed";
+    aMsg.streaming = false;
+    aMsg.blocks.push({ type: "error", title: "KINETIC gặp sự cố", body: friendlyError(e.message), detail: e.message });
+    persist(); renderChat(); renderSidebar();
+  }
+}
+
+function friendlyError(msg) {
+  if (!msg) return "Không xác định.";
+  if (/ANTHROPIC_API_KEY/i.test(msg)) return "Chưa cấu hình API key. Hãy thêm ANTHROPIC_API_KEY để agent có thể chạy.";
+  if (/Network|Failed to fetch/i.test(msg)) return "Lỗi kết nối tới server.";
+  return "Không thể tạo tác vụ. Vui lòng thử lại.";
+}
+
+function openEventStream(conv) {
+  if (conv.es) try { conv.es.close(); } catch {}
+  conv.es = API.events(conv.taskId, (type, data) => routeEvent(conv, type, data), () => {
+    conv.es = null; finalizeConv(conv);
+  });
+}
+
+function routeEvent(conv, type, data) {
+  conv.eventLog.push({ type, data, at: data.timestamp || new Date().toISOString() });
+  if (conv.eventLog.length > 400) conv.eventLog = conv.eventLog.slice(-400);
+
+  const aMsg = [...conv.messages].reverse().find(m => m.role === "agent");
+
+  switch (type) {
+    case "task_planning_started": conv.planning = true; conv.thinking = false; conv.agentState = "planning"; break;
+    case "task_plan_created":
+      conv.planning = true; conv.agentState = "planning";
+      ensureBlock(conv, "plan");
+      break;
+    case "task_step_started":
+      conv.planning = false; conv.thinking = false; conv.toolRunning = true; conv.agentState = "working";
+      updatePlanStep(conv, data.step_id, "running");
+      break;
+    case "task_step_completed":
+      updatePlanStep(conv, data.step_id, "done"); break;
+    case "task_step_failed":
+      updatePlanStep(conv, data.step_id, "failed"); break;
+    case "tool_started":
+      addToolCall(conv, data); conv.toolRunning = true; conv.agentState = "working"; break;
+    case "tool_output": updateToolCall(conv, data, "running"); break;
+    case "tool_finished": updateToolCall(conv, data, data.exit_code === 0 ? "ok" : "failed"); conv.toolRunning = false; break;
+    case "agent_message":
+      if (data.kind === "text" && data.text) { if (aMsg) { aMsg.text = (aMsg.text || "") + data.text; aMsg.streaming = true; } }
+      else if (data.kind === "stream" && data.event) { /* lightweight */ }
+      conv.thinking = true;
+      break;
+    case "agent_started": conv.thinking = true; break;
+    case "permission_denied": conv.waitingApproval = true; conv.agentState = "waiting";
+      ensureBlock(conv, "approval").data = { tool: data.tool, reason: data.reason }; break;
+    case "agent_error":
+      if (aMsg) aMsg.blocks.push({ type: "error", title: "Lỗi agent", body: data.reason || data.error || "Lỗi không xác định", detail: data.reason });
+      break;
+    case "task_failed": conv.agentState = "failed"; finalizeConv(conv); break;
+    case "task_completed": conv.agentState = "completed"; break;
+    case "task_cancelled": conv.agentState = "cancelled"; break;
+    case "failure_analyzed": ensureBlock(conv, "failure").data = data; break;
+    case "repair_started": case "repair_completed":
+      if (aMsg) aMsg.blocks.push({ type: "info", title: type === "repair_started" ? "Đang sửa lỗi…" : "Đã sửa lỗi", body: "Thử lại lần " + (data.attempt || "") }); break;
+    case "task_recovery_started": conv.agentState = "working"; break;
+    case "task_replanned": conv.planning = true; conv.agentState = "planning";
+      if (aMsg) aMsg.blocks.push({ type: "info", title: "Lập lại kế hoạch", body: "Agent đã điều chỉnh kế hoạch." }); break;
+    default: break;
+  }
+  conv.agentState = deriveAgentState(conv);
+  conv.updatedAt = new Date().toISOString();
+  renderChat(true); renderSidebar(); updateActivityDrawer();
+}
+
+function ensureBlock(conv, type) {
+  let aMsg = [...conv.messages].reverse().find(m => m.role === "agent");
+  if (!aMsg) { aMsg = { id: uid(), role: "agent", text: "", at: new Date().toISOString(), blocks: [] }; conv.messages.push(aMsg); }
+  if (!aMsg.blocks) aMsg.blocks = [];
+  let b = aMsg.blocks.find(x => x.type === type);
+  if (!b) { b = { type, data: {} }; aMsg.blocks.push(b); }
+  return b;
+}
+function updatePlanStep(conv, stepId, status) {
+  const b = ensureBlock(conv, "plan");
+  if (!b.data.steps) b.data.steps = [];
+  let step = b.data.steps.find(s => s.id === stepId);
+  if (!step) { step = { id: stepId, label: humanStep(stepId), status: "pending" }; b.data.steps.push(step); }
+  step.status = status;
+}
+function humanStep(id) {
+  if (!id) return "Bước";
+  const map = { search: "Tìm kiếm nguồn", analyze: "Phân tích nội dung", summarize: "Tổng hợp kết quả", save: "Lưu ghi chú",
+    plan: "Lập kế hoạch", build: "Xây dựng", verify: "Kiểm tra", implement: "Triển khai", test: "Chạy test" };
+  return map[id] || id.replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+function addToolCall(conv, data) {
+  const name = data.tool || data.name || "tool";
+  conv.toolCalls.push({ id: uid(), name, icon: toolIcon(name), status: "running", sub: data.description || data.message || "", detail: "", started: Date.now(), duration: null });
+  const b = ensureBlock(conv, "tools");
+  if (!b.data.calls) b.data.calls = [];
+  b.data.calls = conv.toolCalls.slice();
+}
+function updateToolCall(conv, data, status) {
+  const name = data.tool || data.name;
+  let tc = conv.toolCalls.slice().reverse().find(t => t.name === name && (t.status === "running"));
+  if (!tc) tc = conv.toolCalls[conv.toolCalls.length - 1];
+  if (tc) {
+    tc.status = status;
+    if (data.output || data.result) tc.detail += (tc.detail ? "\n" : "") + String(data.output || data.result);
+    if (data.exit_code != null) tc.detail += "\n[exit " + data.exit_code + "]";
+    if (tc.started) tc.duration = Date.now() - tc.started;
+    if (data.message) tc.sub = data.message;
+  }
+  const b = conv.messages.slice().reverse().find(m => m.role === "agent")?.blocks?.find(x => x.type === "tools");
+  if (b) b.data.calls = conv.toolCalls.slice();
+}
+function toolIcon(name) {
+  const n = String(name).toLowerCase();
+  if (/search|web/.test(n)) return "🔍"; if (/browser/.test(n)) return "🌐"; if (/code|edit|write|file/.test(n)) return "📝";
+  if (/terminal|bash|exec|command/.test(n)) return "⌨"; if (/memory|knowledge|note/.test(n)) return "🧠";
+  if (/git/.test(n)) return "⎇"; if (/image/.test(n)) return "🖼"; if (/api/.test(n)) return "🔌"; return "🛠";
+}
+
+async function finalizeConv(conv) {
+  if (conv._finalized) return; conv._finalized = true;
+  conv.thinking = conv.planning = conv.toolRunning = conv.waitingApproval = false;
+  const aMsg = [...conv.messages].reverse().find(m => m.role === "agent");
+  if (aMsg) aMsg.streaming = false;
+  try { conv.taskSnapshot = await API.getTask(conv.taskId); } catch {}
+  conv.agentState = deriveAgentState(conv);
+  if (conv.agentState === "completed" && aMsg && !aMsg.text) {
+    aMsg.text = "Mình đã hoàn thành tác vụ. ✅";
+  }
+  persist(); renderChat(); renderSidebar();
+}
+
+/* ============================================================
+   RENDER: SIDEBAR
+   ============================================================ */
+function renderSidebar() {
+  const list = $("#conv-list"); const q = ($("#conv-search").value || "").toLowerCase();
+  const items = State.conversations.filter(c => !q || c.title.toLowerCase().includes(q));
+  $("#conv-count").textContent = State.conversations.length;
+  list.innerHTML = "";
+  if (items.length === 0) { list.innerHTML = '<div class="empty-strip" style="margin:8px">Chưa có đoạn chat nào.</div>'; return; }
+  for (const c of items) {
+    const it = el("div", "conv-item" + (c.id === State.activeId ? " active" : ""));
+    it.dataset.id = c.id;
+    const st = c.agentState || "idle";
+    const dotCls = TERMINAL.has(st) ? st : (st === "idle" ? "" : "running");
+    it.innerHTML = `<span class="ci-dot ${dotCls}"></span>
+      <div class="ci-body"><div class="ci-title">${esc(c.title)}</div>
+      <div class="ci-meta">${relTime(c.updatedAt || c.createdAt)}</div></div>
+      <button class="ctx-btn" title="Tuỳ chọn">⋯</button>`;
+    it.addEventListener("click", () => { State.activeId = c.id; showView("chat"); renderChat(); renderSidebar(); });
+    it.querySelector(".ctx-btn").addEventListener("click", (e) => { e.stopPropagation(); convContext(c, it); });
+    list.appendChild(it);
+  }
+}
+function convContext(c, anchor) {
+  const items = [["Đổi tên", () => promptRename(c)], ["Xoá", () => deleteConv(c.id)]];
+  openMenu(anchor, items);
+}
+
+/* ============================================================
+   RENDER: TOPBAR
+   ============================================================ */
+function updateTopbar() {
+  const c = getConv();
+  if (c) {
+    $("#tb-title").textContent = c.title;
+    const st = c.agentState || "idle";
+    const labels = { idle: "Ready", thinking: "Đang suy nghĩ…", planning: "Đang lập kế hoạch…", working: "Đang làm việc…", verifying: "Đang kiểm tra…", waiting: "Chờ xác nhận", completed: "Hoàn thành", failed: "Lỗi", cancelled: "Đã huỷ" };
+    $("#tb-sub").innerHTML = `<span class="agent-status-pill" data-state="${st}"><span class="dot"></span>${labels[st] || st}</span>`;
+  } else {
+    $("#tb-title").textContent = "KINETIC";
+    $("#tb-sub").innerHTML = '<span class="agent-status-pill" data-state="idle"><span class="dot"></span>Ready</span>';
+  }
+}
+
+/* ============================================================
+   RENDER: CHAT
+   ============================================================ */
+function renderChat(streaming = false) {
+  const box = $("#chat-messages"); const c = getConv();
+  updateTopbar();
+  if (!c) { box.innerHTML = ""; return; }
+  // Determine if terminal → stop button
+  const running = c.taskId && !TERMINAL.has(c.agentState);
+  setComposerRunning(running);
+
+  if (c.messages.length === 0 && !c.taskId) {
+    box.innerHTML = `<div class="chat-empty"><div class="bolt">⚡</div><h3>Bắt đầu trò chuyện</h3><p>Kể cho KINETIC nghe bạn cần gì — nghiên cứu, code, phân tích hay tự động hoá.</p></div>`;
+    return;
+  }
+  // Rebuild only if not streaming to avoid jumpiness; for streaming, update last msg in place
+  if (streaming && box.lastChild && box.lastChild._mid) {
+    updateMsgNode(box.lastChild, c.messages[c.messages.length - 1]);
+    maybeScroll(); return;
+  }
+  box.innerHTML = "";
+  for (const m of c.messages) {
+    const node = renderMsg(m); node._mid = m.id; box.appendChild(node);
+  }
+  maybeScroll();
+}
+function renderMsg(m) {
+  const wrap = el("div", "msg " + m.role);
+  wrap._mid = m.id;
+  const avatar = el("div", "avatar", m.role === "user" ? "🧑" : "⚡");
+  const bw = el("div", "bubble-wrap");
+  if (m.role === "user") {
+    const bubble = el("div", "bubble");
+    bubble.innerHTML = `<div class="md">${md(m.text)}</div>`;
+    const meta = el("div", "msg-meta", `<span>${fmtTime(m.at)}</span>
+      <div class="msg-actions"><button data-act="copy">Sao chép</button><button data-act="edit">Sửa</button></div>`);
+    bw.appendChild(bubble); bw.appendChild(meta);
+    bw.querySelector('[data-act="copy"]').onclick = () => { navigator.clipboard.writeText(m.text); toast("Đã sao chép", "ok"); };
+    bw.querySelector('[data-act="edit"]').onclick = () => editUserMsg(m);
+  } else {
+    const bubble = el("div", "bubble");
+    const md_ = el("div", "md" + (m.streaming ? " stream-caret" : ""));
+    md_.innerHTML = md(m.text || (m.streaming && !m.text ? "" : ""));
+    bubble.appendChild(md_);
+    // blocks
+    for (const b of (m.blocks || [])) bubble.appendChild(renderBlock(b));
+    const meta = el("div", "msg-meta", `<span>${fmtTime(m.at)}</span>
+      <div class="msg-actions"><button data-act="copy">Sao chép</button><button data-act="regen">Thử lại</button></div>`);
+    bw.appendChild(bubble); bw.appendChild(meta);
+    bw.querySelector('[data-act="copy"]').onclick = () => { navigator.clipboard.writeText(m.text); toast("Đã sao chép", "ok"); };
+    bw.querySelector('[data-act="regen"]').onclick = () => retryLast();
+  }
+  wrap.appendChild(avatar); wrap.appendChild(bw);
+  return wrap;
+}
+function updateMsgNode(node, m) {
+  const md_ = node.querySelector(".bubble .md");
+  if (md_) { md_.innerHTML = md(m.text || ""); md_.classList.toggle("stream-caret", !!m.streaming); }
+  // rebuild blocks
+  const bubble = node.querySelector(".bubble");
+  bubble.querySelectorAll(".agent-block,.tool-card,.approval-card,.error-card,.info-card").forEach(e => e.remove());
+  for (const b of (m.blocks || [])) bubble.appendChild(renderBlock(b));
+}
+function renderBlock(b) {
+  if (b.type === "plan") return renderPlanBlock(b.data);
+  if (b.type === "tools") return renderToolsBlock(b.data);
+  if (b.type === "approval") return renderApproval(b.data);
+  if (b.type === "error") return renderErrorCard(b.data || {}, b.title, b.body, b.detail);
+  if (b.type === "info") { const c = el("div", "info-card", ""); c.style.cssText = "background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:12px;padding:12px;margin:8px 0;font-size:13px;"; c.innerHTML = `<strong>${esc(b.title||"")}</strong> ${esc(b.body||"")}`; return c; }
+  if (b.type === "failure") return renderErrorCard({ failure_class: b.data?.failure_class, message: b.data?.message }, "Phân tích lỗi", b.data?.message, b.detail);
+  return el("div", "");
+}
+function renderPlanBlock(data) {
+  const steps = data.steps || [];
+  const done = steps.filter(s => s.status === "done").length;
+  const total = steps.length || "?";
+  const pct = steps.length ? Math.round((done / steps.length) * 100) : 0;
+  const block = el("div", "agent-block" + (done < steps.length ? "" : "") , "");
+  block.dataset.state = done < steps.length ? "working" : "completed";
+  block.innerHTML = `<div class="agent-block-head">
+    <div class="ab-icon">${done < steps.length ? "⚡" : "✓"}</div>
+    <div class="ab-title">KINETIC đang thực hiện</div>
+    <div class="ab-progress">${done}/${total}</div>
+    <span class="chev">▶</span></div>
+    <div class="agent-block-body">
+      <div class="plan-progress-bar"><div class="fill" style="width:${pct}%"></div></div>
+      <div class="plan-steps"></div>
+    </div>`;
+  const stepsEl = block.querySelector(".plan-steps");
+  for (const s of steps) {
+    const st = el("div", "plan-step " + s.status);
+    st.innerHTML = `<div class="ps-mark">${s.status === "done" ? "✓" : (s.status === "failed" ? "!" : "")}</div>
+      <div><div class="ps-text">${esc(s.label)}</div></div>`;
+    stepsEl.appendChild(st);
+  }
+  block.querySelector(".agent-block-head").onclick = () => block.classList.toggle("open");
+  if (!block._inited) { block.classList.add("open"); block._inited = true; }
+  return block;
+}
+function renderToolsBlock(data) {
+  const wrap = el("div", "");
+  for (const tc of (data.calls || [])) wrap.appendChild(renderToolCard(tc));
+  if ((data.calls || []).length === 0) wrap.innerHTML = "";
+  return wrap;
+}
+function renderToolCard(tc) {
+  const card = el("div", "tool-card" );
+  card.dataset.status = tc.status;
+  card.innerHTML = `<div class="tool-card-head">
+    <div class="tc-icon">${tc.icon}</div>
+    <div class="tc-name">${esc(tc.name)}</div>
+    <div class="tc-sub">${esc(tc.sub || (tc.status === "running" ? "Đang chạy…" : tc.status === "ok" ? "Hoàn thành" : "Thất bại"))}</div>
+    <div class="tc-dur">${fmtDur(tc.duration)}</div>
+    <div class="tc-status"></div>
+    <span class="chev">▶</span></div>
+    <div class="tool-card-body"><div class="tc-detail">${esc(tc.detail || "(không có chi tiết)")}</div>
+    ${tc.status === "failed" ? '<div class="tool-card-actions"><button class="btn sm">Thử lại</button></div>' : ""}</div>`;
+  card.querySelector(".tool-card-head").onclick = () => card.classList.toggle("open");
+  return card;
+}
+function renderApproval(data) {
+  const c = el("div", "approval-card");
+  c.innerHTML = `<div class="ac-head">⚠ KINETIC cần bạn xác nhận</div>
+    <div class="ac-body">Agent muốn thực hiện: <strong>${esc(data.tool || "hành động")}</strong>${data.reason ? "<br><small>" + esc(data.reason) + "</small>" : ""}</div>
+    <div class="ac-actions">
+      <button class="btn primary sm" data-a="once">Cho phép lần này</button>
+      <button class="btn sm" data-a="task">Cho phép trong tác vụ</button>
+      <button class="btn danger sm" data-a="deny">Từ chối</button>
+    </div>`;
+  c.querySelector('[data-a="once"]').onclick = () => { toast("Đã cho phép (mô phỏng)", "ok"); c.remove(); const conv = getConv(); if (conv) conv.waitingApproval = false; };
+  c.querySelector('[data-a="deny"]').onclick = () => { toast("Đã từ chối"); c.remove(); };
+  return c;
+}
+function renderErrorCard(data, title, body, detail) {
+  const c = el("div", "error-card");
+  const cls = data.failure_class || data.class || "error";
+  const msg = body || data.message || data.reason || data.error || "";
+  c.innerHTML = `<div class="ec-head">⚠ ${esc(title || cls)}</div>
+    <div class="ec-body">${esc(msg)}</div>
+    <div class="tool-card-actions"><button class="btn sm" data-a="retry">Thử lại</button></div>
+    ${detail ? `<details><summary>Chi tiết kỹ thuật</summary><pre>${esc(detail)}</pre></details>` : ""}`;
+  c.querySelector('[data-a="retry"]').onclick = () => retryLast();
+  return c;
+}
+
+/* ============================================================
+   COMPOSER
+   ============================================================ */
+function autoGrow(ta) { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 200) + "px"; }
+function setComposerRunning(running) {
+  const send = $("#chat-send");
+  send.classList.toggle("stop", running);
+  send.textContent = running ? "■" : "↑";
+  send.title = running ? "Dừng" : "Gửi";
+}
+function bindComposer(textareaId, sendId, attachId) {
+  const ta = $("#" + textareaId); const send = $("#" + sendId);
+  ta.addEventListener("input", () => autoGrow(ta));
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
+  });
+  send.addEventListener("click", () => {
+    const conv = getConv();
+    if (conv && conv.taskId && !TERMINAL.has(conv.agentState)) { stopTask(conv); }
+    else onSend();
+  });
+  function onSend() { const v = ta.value; if (!v.trim()) return; ta.value = ""; autoGrow(ta); sendMessage(v); }
+  // attach
+  if (attachId) $("#" + attachId).addEventListener("click", () => $("#file-input").click());
+}
+
+async function stopTask(conv) {
+  if (!conv || !conv.taskId) return;
+  try { await API.cancelTask(conv.taskId); toast("Đã gửi yêu cầu dừng"); }
+  catch { toast("Không thể dừng", "err"); }
+}
+function retryLast() {
+  const conv = getConv(); if (!conv) return;
+  const lastUser = [...conv.messages].reverse().find(m => m.role === "user");
+  if (!lastUser) return;
+  // remove last agent block
+  const lastAgent = [...conv.messages].reverse().find(m => m.role === "agent");
+  if (lastAgent) conv.messages = conv.messages.filter(m => m.id !== lastAgent.id);
+  sendMessage(lastUser.text);
+}
+function editUserMsg(m) {
+  const conv = getConv(); if (!conv) return;
+  openModal("Sửa tin nhắn", `
+    <div class="form-row"><label>Tin nhắn</label><textarea id="edit-text">${esc(m.text)}</textarea></div>
+    <div class="modal-foot"><button class="btn" data-act="cancel">Huỷ</button><button class="btn primary" data-act="save">Lưu & gửi lại</button></div>`);
+  $("#edit-text").focus();
+  $('[data-act="save"]').onclick = () => { const v = $("#edit-text").value.trim(); closeModal(); if (v && v !== m.text) {
+    conv.messages = conv.messages.slice(0, conv.messages.indexOf(m)); sendMessage(v); } };
+  $('[data-act="cancel"]').onclick = closeModal;
+}
+
+/* ---------- Attachments ---------- */
+let pendingAttachments = [];
+function renderAttachments() {
+  const box = $("#composer-attachments"); const conv = getConv();
+  const list = conv ? conv.attachments : pendingAttachments;
+  if (!list || list.length === 0) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+  box.classList.remove("hidden");
+  box.innerHTML = "";
+  for (const f of list) {
+    const chip = el("div", "att-chip");
+    chip.innerHTML = `<span class="att-ico">${fileIcon(f)}</span>
+      <div class="att-body"><div class="att-name">${esc(f.name)}</div><div class="att-size">${fmtSize(f.size)}</div></div>
+      <button class="att-rm">✕</button>`;
+    chip.querySelector(".att-rm").onclick = () => {
+      if (conv) conv.attachments = conv.attachments.filter(x => x !== f);
+      else pendingAttachments = pendingAttachments.filter(x => x !== f);
+      renderAttachments();
+    };
+    box.appendChild(chip);
+  }
+}
+function fileIcon(f) { const t = f.type || ""; if (t.startsWith("image/")) return "🖼"; if (/pdf/.test(t)) return "📄"; if (/code|text|json|javascript|python/.test(t)) return "📝"; return "📎"; }
+function fmtSize(b) { if (!b) return "?"; if (b < 1024) return b + " B"; if (b < 1048576) return (b / 1024).toFixed(1) + " KB"; return (b / 1048576).toFixed(1) + " MB"; }
+function addFiles(files) {
+  const conv = getConv();
+  for (const f of files) {
+    const item = { name: f.name, size: f.size, type: f.type, file: f };
+    if (conv) { conv.attachments = conv.attachments || []; conv.attachments.push(item); }
+    else pendingAttachments.push(item);
+    State.files.unshift({ id: uid(), name: f.name, size: f.size, type: f.type, icon: fileIcon(f), at: new Date().toISOString() });
+  }
+  renderAttachments(); renderFiles(); persist();
+}
+
+/* ============================================================
+   ACTIVITY DRAWER
+   ============================================================ */
+function openActivity() {
+  const conv = getConv();
+  if (!conv || !conv.taskId) { toast("Chưa có tác vụ đang chạy"); return; }
+  const isMobile = window.innerWidth <= 900;
+  if (isMobile) { $("#activity-drawer").classList.remove("show"); openSheet(); }
+  else { $("#drawer-overlay").classList.add("show"); $("#activity-drawer").classList.add("show"); }
+  updateActivityDrawer();
+}
+function openSheet() { /* mobile bottom sheet reuses drawer body in a sheet — simplified: drawer on mobile is full-width */ $("#drawer-overlay").classList.add("show"); $("#activity-drawer").classList.add("show"); }
+function closeActivity() { $("#drawer-overlay").classList.remove("show"); $("#activity-drawer").classList.remove("show"); }
+function updateActivityDrawer() {
+  const conv = getConv(); const body = $("#drawer-body");
+  if (!conv || !conv.taskId) { body.innerHTML = '<div class="empty-strip">Chưa có hoạt động.</div>'; return; }
+  const steps = (conv.messages.slice().reverse().find(m => m.role === "agent")?.blocks?.find(b => b.type === "plan")?.data?.steps) || [];
+  const done = steps.filter(s => s.status === "done").length;
+  const pct = steps.length ? Math.round((done / steps.length) * 100) : 0;
+  const elapsed = conv.eventLog.length ? fmtDur(Date.now() - new Date(conv.eventLog[0].at).getTime()) : "—";
+  let html = `<div class="drawer-section"><h4>Tác vụ</h4><div class="kv-list">
+    <dt>Yêu cầu</dt><dd>${esc(conv.messages.find(m=>m.role==="user")?.text?.slice(0,60) || "—")}</dd>
+    <dt>Trạng thái</dt><dd>${conv.agentState || "—"}</dd>
+    <dt>Bước</dt><dd>${done}/${steps.length || "—"}</dd>
+    <dt>Tool calls</dt><dd>${conv.toolCalls.length}</dd>
+    <dt>Sự kiện</dt><dd>${conv.eventLog.length}</dd>
+    <dt>Thời gian</dt><dd>${elapsed}</dd></div></div>`;
+  html += `<div class="drawer-section"><h4>Tiến độ</h4><div class="plan-progress-bar"><div class="fill" style="width:${pct}%"></div></div><div class="plan-steps">`;
+  for (const s of steps) html += `<div class="plan-step ${s.status}"><div class="ps-mark">${s.status==="done"?"✓":s.status==="failed"?"!":""}</div><div class="ps-text">${esc(s.label)}</div></div>`;
+  html += `</div></div>`;
+  html += `<div class="drawer-section"><h4>Nhật ký sự kiện</h4><div class="drawer-evt-log">`;
+  for (const e of conv.eventLog.slice(-60).reverse()) {
+    html += `<div class="ev-row ${e.type}"><span class="t">${fmtTime(e.at)}</span><span class="ty">${esc(e.type)}</span></div>`;
+  }
+  html += `</div></div>`;
+  body.innerHTML = html;
+  $("#drawer-title").textContent = "Hoạt động · " + conv.title.slice(0, 24);
+}
+
+/* ============================================================
+   PAGES: Agents / Automations / Files
+   ============================================================ */
+function renderAgents() {
+  const grid = $("#agents-grid"); grid.innerHTML = "";
+  for (const a of State.agents) {
+    const c = el("div", "card");
+    c.innerHTML = `<div class="card-head"><div class="c-ico">${a.icon}</div><div><div class="c-title">${esc(a.name)}</div><div class="c-sub">${esc(a.desc)}</div></div></div>
+      <div class="c-body"><span class="status-pill ${a.status === "active" ? "on" : "off"}"><span class="dot"></span>${a.status === "active" ? "Active" : "Inactive"}</span></div>
+      <div class="c-tags">${a.tools.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+      <div class="c-actions"><button class="btn sm" data-act="open">Mở</button><button class="btn sm" data-act="cfg">Cấu hình</button></div>`;
+    c.querySelector('[data-act="cfg"]').onclick = () => agentConfig(a);
+    c.querySelector('[data-act="open"]').onclick = () => { newConversation("Chat với " + a.name); };
+    grid.appendChild(c);
+  }
+}
+function agentConfig(a) {
+  openModal("Cấu hình " + a.name, `
+    <div class="form-row"><label>Tên</label><input id="ag-name" value="${esc(a.name)}"></div>
+    <div class="form-row"><label>Mô tả</label><input id="ag-desc" value="${esc(a.desc)}"></div>
+    <div class="form-row"><label>Mô hình</label><select id="ag-model"><option>Sonnet 5</option><option>Haiku</option><option>Opus</option><option>Auto</option></select></div>
+    <div class="form-row"><label>Hệ thống</label><textarea id="ag-sys">${esc(a.system)}</textarea></div>
+    <div class="modal-foot"><button class="btn" data-act="cancel">Huỷ</button><button class="btn primary" data-act="save">Lưu</button></div>`);
+  $("#ag-model").value = a.model;
+  $('[data-act="save"]').onclick = () => { a.name = $("#ag-name").value; a.desc = $("#ag-desc").value; a.model = $("#ag-model").value; a.system = $("#ag-sys").value; persist(); renderAgents(); closeModal(); toast("Đã lưu", "ok"); };
+  $('[data-act="cancel"]').onclick = closeModal;
+}
+
+function renderAutomations(home) {
+  const list = home ? State.automations.slice(0, 3) : State.automations;
+  if (home) {
+    const box = $("#home-automations"); box.innerHTML = "";
+    if (list.length === 0) { box.innerHTML = '<div class="empty-strip">Chưa có automation.</div>'; return; }
+    for (const a of list) {
+      const row = el("div", "card");
+      row.innerHTML = `<div class="card-head"><div class="c-ico" style="width:30px;height:30px;font-size:15px">⚙</div><div><div class="c-title">${esc(a.name)}</div><div class="c-sub">${esc(a.schedule)}</div></div>
+        <span class="status-pill ${a.enabled ? "on" : "off"}" style="margin-left:auto"><span class="dot"></span>${a.enabled ? "Bật" : "Tắt"}</span></div>`;
+      box.appendChild(row);
+    }
+    return;
+  }
+  const grid = $("#automations-grid"); grid.innerHTML = "";
+  for (const a of State.automations) {
+    const c = el("div", "card");
+    c.innerHTML = `<div class="card-head"><div class="c-ico">⚙</div><div><div class="c-title">${esc(a.name)}</div><div class="c-sub">${esc(a.schedule)}</div></div></div>
+      <div class="c-body"><span class="status-pill ${a.enabled ? "on" : "off"}"><span class="dot"></span>${a.enabled ? "Active" : "Disabled"}</span></div>
+      <div class="c-body" style="font-size:12px;color:var(--muted)">Lần cuối: ${a.lastRun ? a.lastRun.status + " · " + relTime(a.lastRun.at) : "—"}</div>
+      <div class="c-actions"><button class="btn primary sm" data-act="run">Chạy ngay</button><button class="btn sm" data-act="edit">Sửa</button><button class="btn sm" data-act="toggle">${a.enabled ? "Tắt" : "Bật"}</button></div>`;
+    c.querySelector('[data-act="run"]').onclick = () => runAutomation(a);
+    c.querySelector('[data-act="edit"]').onclick = () => editAutomation(a);
+    c.querySelector('[data-act="toggle"]').onclick = () => { a.enabled = !a.enabled; persist(); renderAutomations(); toast(a.enabled ? "Đã bật" : "Đã tắt"); };
+    grid.appendChild(c);
+  }
+}
+function runAutomation(a) {
+  toast("Đang chạy: " + a.name + "…");
+  // kicks a real task via the agent
+  newConversation(a.name); sendMessage(a.prompt);
+}
+function editAutomation(a) {
+  openModal(a ? "Sửa automation" : "Tự động hoá mới", `
+    <div class="form-row"><label>Tên</label><input id="au-name" value="${esc(a?.name || "")}"></div>
+    <div class="form-row"><label>Lịch (cron, mô tả)</label><input id="au-sched" value="${esc(a?.schedule || "")}" placeholder="Every day · 08:00"></div>
+    <div class="form-row"><label>Cron</label><input id="au-cron" value="${esc(a?.cron || "")}" placeholder="0 8 * * *"></div>
+    <div class="form-row"><label>Prompt</label><textarea id="au-prompt">${esc(a?.prompt || "")}</textarea></div>
+    <div class="modal-foot"><button class="btn" data-act="cancel">Huỷ</button>${a ? '<button class="btn danger" data-act="del">Xoá</button>' : ""}<button class="btn primary" data-act="save">Lưu</button></div>`);
+  $('[data-act="save"]').onclick = () => {
+    const name = $("#au-name").value.trim(); if (!name) return;
+    if (a) { a.name = name; a.schedule = $("#au-sched").value; a.cron = $("#au-cron").value; a.prompt = $("#au-prompt").value; }
+    else { State.automations.unshift({ id: uid(), name, schedule: $("#au-sched").value, cron: $("#au-cron").value, prompt: $("#au-prompt").value, enabled: true, agent: "kinetic", tools: [], lastRun: null, nextRun: null, history: [] }); }
+    persist(); renderAutomations(); closeModal(); toast("Đã lưu", "ok");
+  };
+  $('[data-act="cancel"]').onclick = closeModal;
+  if (a) $('[data-act="del"]').onclick = () => { State.automations = State.automations.filter(x => x.id !== a.id); persist(); renderAutomations(); closeModal(); toast("Đã xoá"); };
+}
+
+function renderFiles() {
+  const grid = $("#files-grid"); grid.innerHTML = "";
+  if (State.files.length === 0) { grid.innerHTML = '<div class="empty-strip" style="grid-column:1/-1">Chưa có file nào. Nhấn "Tải lên" để bắt đầu.</div>'; return; }
+  for (const f of State.files) {
+    const c = el("div", "card");
+    c.innerHTML = `<div class="card-head"><div class="c-ico">${f.icon || "📎"}</div><div><div class="c-title">${esc(f.name)}</div><div class="c-sub">${fmtSize(f.size)} · ${relTime(f.at)}</div></div></div>
+      <div class="c-actions"><button class="btn sm" data-act="open">Mở</button><button class="btn sm" data-act="attach">Đính kèm</button><button class="btn sm" data-act="del">Xoá</button></div>`;
+    c.querySelector('[data-act="del"]').onclick = () => { State.files = State.files.filter(x => x.id !== f.id); persist(); renderFiles(); };
+    c.querySelector('[data-act="attach"]').onclick = () => { const conv = getConv() || newConversation(f.name.slice(0, 30)); conv.attachments = conv.attachments || []; conv.attachments.push(f); showView("chat"); renderAttachments(); toast("Đã đính kèm"); };
+    grid.appendChild(c);
+  }
+}
+
+/* ============================================================
+   MODAL / MENU / PALETTE
+   ============================================================ */
+function openModal(title, inner) {
+  $("#modal-box").innerHTML = `<div class="modal-head"><h3>${esc(title)}</h3><button class="icon-btn" id="modal-x">✕</button></div><div class="modal-body">${inner}</div>`;
+  $("#modal").classList.add("show");
+  $("#modal-x").onclick = closeModal;
+}
+function closeModal() { $("#modal").classList.remove("show"); }
+function openMenu(anchor, items) {
+  closeMenu();
+  const r = anchor.getBoundingClientRect();
+  const m = el("div", ""); m.id = "ctx-menu"; m.style.cssText = `position:fixed;z-index:130;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:4px;box-shadow:var(--shadow);top:${r.bottom}px;left:${r.right}px;min-width:140px`;
+  for (const [label, fn] of items) { const it = el("button", "", esc(label)); it.style.cssText = "display:block;width:100%;text-align:left;padding:7px 10px;font-size:13px;border-radius:5px;color:var(--fg-2)"; it.onmouseenter = () => it.style.background = "var(--surface-3)"; it.onmouseleave = () => it.style.background = ""; it.onclick = () => { closeMenu(); fn(); }; m.appendChild(it); }
+  document.body.appendChild(m);
+  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 10);
+}
+function closeMenu() { const m = $("#ctx-menu"); if (m) m.remove(); }
+function promptRename(c) {
+  openModal("Đổi tên đoạn chat", `<div class="form-row"><label>Tên</label><input id="rn-name" value="${esc(c.title)}"></div>
+    <div class="modal-foot"><button class="btn" data-act="cancel">Huỷ</button><button class="btn primary" data-act="ok">Lưu</button></div>`);
+  $("#rn-name").focus(); $("#rn-name").select();
+  $('[data-act="ok"]').onclick = () => { renameConv(c.id, $("#rn-name").value.trim() || c.title); closeModal(); };
+  $('[data-act="cancel"]').onclick = closeModal;
+}
+
+/* ---------- Command palette ---------- */
+function openPalette() {
+  $("#palette").classList.add("show"); $("#palette-input").value = ""; $("#palette-input").focus();
+  renderPalette("");
+}
+function closePalette() { $("#palette").classList.remove("show"); }
+function renderPalette(q) {
+  q = q.toLowerCase(); const res = $("#palette-results"); res.innerHTML = "";
+  const cmds = [
+    { ico: "⌂", t: "Trang chủ", s: "Mở trang chủ", k: "", run: () => showView("home") },
+    { ico: "＋", t: "Đoạn chat mới", s: "Bắt đầu trò chuyện mới", k: "⌘⇧O", run: () => newConversation() },
+    { ico: "♙", t: "Agents", s: "Quản lý agent", k: "", run: () => showView("agents") },
+    { ico: "⚙", t: "Automations", s: "Tự động hoá", k: "", run: () => showView("automations") },
+    { ico: "◫", t: "Files", s: "Quản lý file", k: "", run: () => showView("files") },
+    { ico: "⚙", t: "Cài đặt", s: "Tuỳ chỉnh", k: "", run: () => showView("settings") },
+  ];
+  const convs = State.conversations.filter(c => !q || c.title.toLowerCase().includes(q)).slice(0, 6).map(c => ({ ico: "💬", t: c.title, s: relTime(c.updatedAt), k: "", run: () => { State.activeId = c.id; showView("chat"); renderChat(); } }));
+  const files = State.files.filter(f => !q || f.name.toLowerCase().includes(q)).slice(0, 5).map(f => ({ ico: f.icon || "📎", t: f.name, s: fmtSize(f.size), k: "", run: () => showView("files") }));
+  const all = [...cmds.filter(c => !q || c.t.toLowerCase().includes(q) || c.s.toLowerCase().includes(q)), ...convs, ...files];
+  if (all.length === 0) { res.innerHTML = '<div class="empty-strip" style="margin:8px">Không tìm thấy.</div>'; return; }
+  all.forEach((c, i) => {
+    const it = el("div", "palette-item" + (i === 0 ? " sel" : ""));
+    it.innerHTML = `<span class="pi-ico">${c.ico}</span><div class="pi-body"><div class="pi-title">${esc(c.t)}</div><div class="pi-sub">${esc(c.s)}</div></div><span class="pi-kbd">${c.k || ""}</span>`;
+    it.onclick = () => { closePalette(); c.run(); };
+    res.appendChild(it);
+  });
+}
+
+/* ============================================================
+   VIEW SWITCHING
+   ============================================================ */
+function showView(name) {
+  $$(".view").forEach(v => v.classList.remove("active"));
+  $("#view-" + name).classList.add("active");
+  $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === name));
+  if (name === "agents") renderAgents();
+  if (name === "automations") renderAutomations();
+  if (name === "files") renderFiles();
+  if (name === "home") renderAutomations(true);
+  if (name === "settings") renderSettingsStatus();
+  closeSidebarMobile();
+}
+function openSidebarMobile() { $("#app").classList.add("sidebar-open"); $("#mobile-overlay").classList.add("show"); }
+function closeSidebarMobile() { $("#app").classList.remove("sidebar-open"); $("#mobile-overlay").classList.remove("show"); }
+
+/* ============================================================
+   HEALTH
+   ============================================================ */
+async function checkHealth() {
+  const row = $("#health-row");
+  try {
+    const d = await API.health();
+    State.health = { backend: d.backend_ready, key: d.api_key_configured, workspace: d.workspace };
+    const ok = d.backend_ready; const keyOk = d.api_key_configured;
+    row.innerHTML = `<span class="dot ${ok ? "ok" : "warn"}"></span><span>${ok ? "Backend sẵn sàng" : "Backend đóng"} · ${keyOk ? "API key đã set" : "Thiếu API key"}</span>`;
+    renderSettingsStatus();
+  } catch {
+    State.health = { backend: false, key: null, workspace: "" };
+    row.innerHTML = '<span class="dot bad"></span><span>Backend offline</span>';
+  }
+}
+function renderSettingsStatus() {
+  const s = State.health;
+  $("#set-key-status").textContent = s.key === null ? "Không xác định" : (s.key ? "Đã cấu hình ✓" : "Chưa set ✗");
+}
+
+/* ============================================================
+   SCROLL / DRAG-DROP / KEYBOARD
+   ============================================================ */
+function maybeScroll() {
+  const sc = $("#chat-scroll"); const near = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 140;
+  if (near) sc.scrollTop = sc.scrollHeight;
+  $("#scroll-bottom-btn").classList.toggle("show", !near && ($("#chat-messages").children.length > 0));
+}
+function bindKeyboard() {
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "o") { e.preventDefault(); newConversation(); return; }
+    if (e.key === "Escape") { closePalette(); closeModal(); closeActivity(); closeMenu(); closeSidebarMobile(); }
+  });
+  // palette typing
+  $("#palette-input").addEventListener("input", (e) => renderPalette(e.target.value));
+  $("#palette").addEventListener("click", (e) => { if (e.target.id === "palette") closePalette(); });
+  // scroll
+  $("#chat-scroll").addEventListener("scroll", () => {
+    const sc = $("#chat-scroll");
+    $("#scroll-bottom-btn").classList.toggle("show", sc.scrollHeight - sc.scrollTop - sc.clientHeight > 200 && $("#chat-messages").children.length > 0);
+  });
+  $("#scroll-bottom-btn").addEventListener("click", () => { $("#chat-scroll").scrollTop = $("#chat-scroll").scrollHeight; });
+  // drag drop on composer
+  const comp = $("#chat-composer");
+  ["dragenter", "dragover"].forEach(ev => comp.addEventListener(ev, (e) => { e.preventDefault(); comp.style.borderColor = "var(--accent)"; }));
+  ["dragleave", "drop"].forEach(ev => comp.addEventListener(ev, (e) => { e.preventDefault(); comp.style.borderColor = ""; }));
+  comp.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+  comp.addEventListener("paste", (e) => { const items = e.clipboardData?.items || []; for (const it of items) if (it.kind === "file") { const f = it.getAsFile(); if (f) addFiles([f]); } });
+}
+
+/* ============================================================
+   TOOLS / MODEL MENUS
+   ============================================================ */
+const TOOL_LIST = ["Web Search", "Browser", "Code", "Files", "Terminal", "Knowledge", "Notes", "API", "Image"];
+let activeTools = new Set(["Web Search", "Browser", "Code", "Files"]);
+function openToolsMenu(btn) {
+  closeMenu();
+  const r = btn.getBoundingClientRect();
+  const m = el("div", ""); m.id = "ctx-menu"; m.style.cssText = `position:fixed;z-index:130;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px;box-shadow:var(--shadow);top:${r.bottom + 4}px;left:${r.left}px;min-width:180px`;
+  m.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:2px 6px 6px;text-transform:uppercase;letter-spacing:.06em">Tools</div>';
+  for (const t of TOOL_LIST) {
+    const on = activeTools.has(t);
+    const it = el("label", "", ""); it.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:13px;border-radius:6px;cursor:pointer";
+    it.innerHTML = `<input type="checkbox" ${on ? "checked" : ""}> <span>${esc(t)}</span>`;
+    it.querySelector("input").onchange = (e) => { if (e.target.checked) activeTools.add(t); else activeTools.delete(t); };
+    it.onmouseenter = () => it.style.background = "var(--surface-3)"; it.onmouseleave = () => it.style.background = "";
+    m.appendChild(it);
+  }
+  document.body.appendChild(m);
+  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 10);
+}
+const MODELS = [{ name: "Sonnet 5", desc: "Cân bằng", tag: "Balanced" }, { name: "Haiku", desc: "Nhanh", tag: "Fast" }, { name: "Opus", desc: "Lý luận mạnh", tag: "Reasoning" }, { name: "Auto", desc: "Tự chọn", tag: "Auto" }];
+let currentModel = "Sonnet 5";
+function openModelMenu(btn) {
+  closeMenu();
+  const r = btn.getBoundingClientRect();
+  const m = el("div", ""); m.id = "ctx-menu"; m.style.cssText = `position:fixed;z-index:130;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:var(--shadow);top:${r.bottom + 4}px;left:${r.left}px;min-width:200px`;
+  for (const mo of MODELS) {
+    const it = el("div", "", ""); it.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:13px;border-radius:6px;cursor:pointer";
+    it.innerHTML = `<div><div>${esc(mo.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(mo.desc)}</div></div>${mo.name === currentModel ? '<span style="margin-left:auto;color:var(--accent-2)">✓</span>' : ""}`;
+    it.onclick = () => { currentModel = mo.name; btn.firstChild.textContent = mo.name + " "; closeMenu(); };
+    it.onmouseenter = () => it.style.background = "var(--surface-3)"; it.onmouseleave = () => it.style.background = "";
+    m.appendChild(it);
+  }
+  document.body.appendChild(m);
+  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 10);
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init() {
+  loadPersisted();
+  // nav
+  $$(".nav-item").forEach(n => n.addEventListener("click", (e) => { if (n.dataset.view === "home") { showView("home"); } else showView(n.dataset.view); }));
+  $$('.home-section-head a[data-view]').forEach(a => a.addEventListener("click", () => showView(a.dataset.view)));
+  $("#new-chat-btn").addEventListener("click", () => newConversation());
+  $("#menu-btn").addEventListener("click", openSidebarMobile);
+  $("#mobile-overlay").addEventListener("click", closeSidebarMobile);
+  $("#conv-search").addEventListener("input", renderSidebar);
+  // home composer
+  bindComposer("home-prompt", "home-send", "home-attach");
+  $("#home-tools-btn").addEventListener("click", (e) => { e.stopPropagation(); openToolsMenu(e.currentTarget); });
+  $("#home-model-btn").addEventListener("click", (e) => { e.stopPropagation(); openModelMenu(e.currentTarget); });
+  $$(".suggestion-chip").forEach(c => c.addEventListener("click", () => { newConversation(c.dataset.suggest); $("#chat-prompt").value = c.dataset.suggest + " "; autoGrow($("#chat-prompt")); $("#chat-prompt").focus(); }));
+  // chat composer
+  bindComposer("chat-prompt", "chat-send", "chat-attach");
+  $("#chat-tools-btn").addEventListener("click", (e) => { e.stopPropagation(); openToolsMenu(e.currentTarget); });
+  $("#chat-model-btn").addEventListener("click", (e) => { e.stopPropagation(); openModelMenu(e.currentTarget); });
+  // activity
+  $("#activity-btn").addEventListener("click", openActivity);
+  $("#drawer-close").addEventListener("click", closeActivity);
+  $("#drawer-overlay").addEventListener("click", closeActivity);
+  // palette
+  $("#cmdk-btn").addEventListener("click", openPalette);
+  // file input
+  $("#file-input").addEventListener("change", (e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ""; });
+  $("#upload-file-btn").addEventListener("click", () => $("#file-input").click());
+  $("#add-agent-btn").addEventListener("click", () => agentConfig({ id: uid(), name: "Agent mới", desc: "", icon: "🤖", status: "inactive", model: "Sonnet 5", tools: [], system: "" }));
+  $("#add-automation-btn").addEventListener("click", () => editAutomation(null));
+  // settings
+  $("#set-dark").addEventListener("change", (e) => { State.settings.dark = e.target.checked; persist(); });
+  $("#set-anim").addEventListener("change", (e) => { State.settings.anim = e.target.checked; document.body.style.setProperty("--ease", e.target.checked ? "" : "linear"); persist(); });
+  $("#set-model").addEventListener("change", (e) => { State.settings.model = e.target.value; currentModel = e.target.value; persist(); });
+  $("#set-repair").addEventListener("change", (e) => { State.settings.repair = e.target.checked; persist(); });
+  $("#set-key-btn").addEventListener("click", () => toast("API key được đặt qua biến môi trường ANTHROPIC_API_KEY"));
+  // code copy delegation
+  document.addEventListener("click", (e) => { if (e.target.classList?.contains("copy-code")) { navigator.clipboard.writeText(decodeURIComponent(e.target.dataset.code || "")); toast("Đã sao chép code", "ok"); } });
+  // keyboard & drag
+  bindKeyboard();
+  // initial render
+  renderSidebar(); renderAutomations(true); renderAgents(); renderAutomations(); renderFiles();
+  if (State.activeId) { showView("chat"); renderChat(); } else { showView("home"); }
+  checkHealth(); setInterval(checkHealth, 12000);
+  // restore running tasks: reattach SSE for non-terminal conversations with taskId
+  for (const c of State.conversations) {
+    if (c.taskId && !TERMINAL.has(c.agentState) && !c.es) {
+      c._finalized = false;
+      try { openEventStream(c); } catch {}
+    }
+  }
+}
+document.addEventListener("DOMContentLoaded", init);
 </script>
 </body>
 </html>

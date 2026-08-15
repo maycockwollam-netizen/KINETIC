@@ -607,5 +607,92 @@ live-agent test). Ruff clean. Wheel builds + installs. CLI works. E2E passes.
   pending). Production runs under uvicorn where the loop persists across
   requests, so none of these occur in real use.
 
+## Phase 7.3 front-end redesign (DONE — production AI agent workspace UI)
+Replaced the 6-panel "test console" `web/static/index.html` with a complete
+production-quality single-file web app (vanilla JS + CSS, no framework). Chat
+is the center; agent capabilities appear around the conversation.
+- Design system: dark charcoal + blue-violet KINETIC lightning accent, light
+  theme via `prefers-color-scheme`, CSS variables, subtle animations, focus
+  states, ARIA labels. Calm → focused → powerful.
+- AppShell + collapsible Sidebar (brand, search, new chat, nav, recent
+  conversations with relative timestamps + status dots, health row) +
+  MobileDrawer (≤900px sidebar becomes a transform-off-canvas drawer with
+  overlay; menu button in topbar).
+- Views: Home (hero + composer + suggestions + automations strip), Chat
+  (message list + composer + scroll-to-bottom), Agents (cards + config
+  modal), Automations (cards + edit/run-now/toggle + modal), Files (cards +
+  upload/attach), Settings (toggles, model select, API-key status, shortcuts).
+- Conversation model (client-side, localStorage-persisted): {id,title,
+  messages, taskId, agentState, plan, toolCalls, eventLog, attachments}.
+  Never displays raw IDs to users; titles auto-derived from first message.
+- Agent execution states: idle→thinking→planning→working→verifying→completed/
+  failed/cancelled/waiting, derived from SSE events. Plan block renders
+  expandable steps (done/running/failed/pending) + progress bar; collapses
+  to "KINETIC đang thực hiện · n/total".
+- Tool cards: icon + name + status (running spinner / ✓ / !) + duration +
+  expandable detail + retry on failure. Approval card + error card (with
+  "View details" disclosure) inline in conversation — no raw backend errors.
+- Activity drawer (desktop right-side; mobile full-width via overlay):
+  task/progress/steps/tool-calls/elapsed + bounded event log. Opens from
+  topbar ≡ button; not permanently visible (keeps chat dominant).
+- Premium composer: auto-grow textarea, Enter=send / Shift+Enter=newline,
+  attach (+), Tools menu (checkboxes), Model selector (Sonnet5/Haiku/Opus/
+  Auto), send/stop toggle (■ when running), drag-drop + paste images,
+  attachment chips with remove. Two composer instances (home + chat).
+- Command palette (⌘K / ⌘⇧O): searches commands + conversations + files.
+- Markdown renderer (safe, escaped): headings, lists, bold/italic, links,
+  inline code, fenced code blocks with copy button + language label,
+  blockquotes, tables, hr. Streaming caret while `agent_message` text streams.
+- API adapter layer (`API` object): wraps the EXISTING backend — health,
+  createTask, getTask, listTasks, cancelTask, resumeTask, outcome, events
+  (SSE via EventSource listening to every named event type). NO fake APIs;
+  missing surfaces (conversations/agents/automations/files persistence) are
+  client-side state + adapter, only task execution calls the real backend.
+  SSE events routed: task_planning_started/plan_created→plan block,
+  step_started/completed/failed→plan steps, tool_started/output/finished→
+  tool cards, agent_message(text)→streaming text, permission_denied→approval,
+  task_failed/completed/cancelled→finalize. On stream_end, fetches final
+  snapshot + outcome. Running tasks reattach SSE on reload.
+- SECURITY: pure static file, NO new backend surface, NO subprocess, NO
+  filesystem mutation, NO secrets in code. All free-form content rendered
+  through `esc()` (HTML-escape) + safe markdown; backend `scrub()` still
+  masks secrets at the API boundary before the browser sees anything.
+35 Phase 7.3 backend tests still pass (unchanged). Ruff clean.
+
+## Phase 7.3 front-end gotchas
+- The conversation/task bridge is the key mapping: each chat message send
+  calls `API.createTask(prompt)` → returns `{task_id, state}` → opens an
+  SSE `EventSource` on `/api/tasks/{id}/events`. The conversation object
+  holds `taskId`, `agentState`, `plan`, `toolCalls`, `eventLog`; events
+  mutate these and trigger re-render. WITHOUT `ANTHROPIC_API_KEY` the task
+  fails fast — the UI shows a friendly error card (not a raw stack trace).
+- `routeEvent` derives `agentState` AFTER applying the event, via
+  `deriveAgentState(conv)`: terminal task state wins; else planning >
+  toolRunning > thinking > waiting > snapshot state. The topbar pill +
+  sidebar dot + composer stop button all read this derived state.
+- `ensureBlock(conv, type)` appends a structured block (plan/tools/approval/
+  error/info) to the LAST assistant message; `updateMsgNode` rebuilds only
+  blocks (removing old agent-block/tool-card/etc.) on streaming re-render so
+  the markdown text node is preserved (no caret jump). For streaming text,
+  `renderChat(true)` updates the last node in place instead of full rebuild.
+- Conversations persist to `localStorage` (`kinetic_state`) but `messages`
+  have `streaming:false` force-set on persist (a streaming flag must not
+  survive reload). On init, non-terminal conversations with a `taskId`
+  re-open their SSE stream so a reload mid-run restores live state.
+- The markdown renderer extracts fenced code blocks BEFORE escaping (so code
+  content is escaped but not mangled), restores them after, and adds a
+  copy button via `data-code` (URL-encoded) + a delegated click handler.
+- Tool/model menus are ad-hoc `position:fixed` divs (`#ctx-menu`) anchored
+  to the button's `getBoundingClientRect()`, dismissed by a one-shot document
+  click listener. `e.stopPropagation()` on the opener prevents immediate
+  dismissal. Same pattern powers the conversation context menu (⋯).
+- Mobile (≤900px): sidebar is `position:fixed` off-canvas (transform
+  translateX(-100%)); `.app.sidebar-open` + `#mobile-overlay` show it.
+  Drawer becomes full-width. Composer padding shrinks. Chat messages get
+  reduced padding. No permanent side panels on mobile (chat stays dominant).
+- The home composer and chat composer are separate instances sharing
+  `bindComposer(id, sendId, attachId)` + `sendMessage`. Suggestion chips
+  create a new conversation AND pre-fill the chat composer.
+
 ## TODO Phase 8
 Not started.
