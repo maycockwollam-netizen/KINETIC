@@ -49,6 +49,7 @@ only-include = [
     "observability",
     "project",
     "security",
+    "store",
     "tasks",
     "tools",
     "web",

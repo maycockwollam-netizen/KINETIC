@@ -59,6 +59,15 @@ class SessionConfig:
     allow_memory_read: bool = True
     allow_memory_write: bool = False
     allow_memory_delete: bool = False
+    # Phase 7.3+ — LLM provider overrides (per-task). ``api_key`` is held in
+    # memory only (never persisted); ``base_url`` enables proxies/gateways.
+    base_url: str | None = None
+    api_key: str | None = None
+    # Whether to engage interactive (human-in-the-loop) tool approval for this
+    # session. Off by default preserves the existing automatic permission gate.
+    interactive_approval: bool = False
+    # Override the Phase 6 repair toggle per-task (None = use settings default).
+    enable_repair: bool | None = None
 
 
 @dataclass
@@ -106,6 +115,7 @@ class AgentSession:
         self.memory = self._build_memory()
         self.context = self._build_context_engine()
         self.registry = self._build_registry(cfg.workspace)
+        self._approval_registry: Any = None
         self._adapter: AgentAdapter | None = None
 
     def _build_memory(self) -> MemoryManager:
@@ -250,8 +260,21 @@ class AgentSession:
             fallback_model=self.settings.fallback_model,
             max_budget_usd=self.settings.max_budget_usd,
             system_prompt=self._effective_system_prompt(),
+            base_url=self.cfg.base_url or self.settings.llm_base_url,
+            api_key=self.cfg.api_key,
+            interactive_approval=self.cfg.interactive_approval,
+            approval_registry=self._approval_registry,
+            approval_timeout=self.settings.web_approval_timeout,
         )
         return self._adapter
+
+    @property
+    def approval_registry(self) -> Any:
+        return self._approval_registry
+
+    @approval_registry.setter
+    def approval_registry(self, value: Any) -> None:
+        self._approval_registry = value
 
     def _effective_system_prompt(self) -> str | None:
         """Base system prompt; augmented with assembled context at run time."""

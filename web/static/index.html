@@ -729,8 +729,14 @@ button { cursor: pointer; border: none; background: none; }
             <div class="settings-row"><div class="sr-label">Cho phép repair tự động</div><label class="toggle"><input type="checkbox" id="set-repair" /><span class="track"></span></label></div>
           </div>
           <div class="settings-section"><h3>Bảo mật & API</h3>
-            <div class="settings-row"><div><div class="sr-label">API key</div><div class="sr-sub" id="set-key-status">—</div></div>
-              <button class="btn sm" id="set-key-btn">Cập nhật</button></div>
+            <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px"><div class="sr-label">Base URL (proxy / gateway)</div>
+              <input id="llm-base" type="text" placeholder="https://api.anthropic.com (để trống = mặc định)" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13px;color:var(--text)"></div>
+            <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px"><div class="sr-label">API key</div>
+              <input id="llm-key" type="password" placeholder="sk-... (chỉ giữ trong phiên, không lưu)" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13px;color:var(--text)">
+              <div class="sr-sub" id="set-key-status">—</div></div>
+            <div class="settings-row"><div></div><button class="btn primary sm" id="set-key-btn">Lưu cấu hình LLM</button></div>
+            <div class="settings-row"><div><div class="sr-label">Duyệt công cụ trước khi chạy</div><div class="sr-sub">Cho phép duyệt từng tool call</div></div>
+              <label class="toggle"><input type="checkbox" id="set-interactive" /><span class="track"></span></label></div>
             <div class="settings-row"><div><div class="sr-label">Che giấu giá trị nhạy cảm</div><div class="sr-sub">Tự động mask secrets</div></div>
               <label class="toggle"><input type="checkbox" checked disabled /><span class="track"></span></label></div>
           </div>
@@ -844,45 +850,24 @@ const State = {
   files: [],
   settings: { dark: true, anim: true, model: "Sonnet 5", repair: false },
   health: { backend: null, key: null, workspace: "" },
+  llm: { base_url: null, model: null, api_key_set: false, env_api_key_set: false, interactive_approval: false, _apiKey: null },
 };
 
 function loadPersisted() {
+  // Only conversations + UI settings are kept client-side (titles/timestamps
+  // for the chat list). Agents, automations, files, and LLM config are now
+  // persisted server-side via the API — no more fake seed data.
   try {
     const p = JSON.parse(localStorage.getItem("kinetic_state") || "{}");
     if (p.conversations) State.conversations = p.conversations;
-    if (p.automations) State.automations = p.automations;
-    if (p.files) State.files = p.files;
     if (p.settings) Object.assign(State.settings, p.settings);
   } catch {}
-  // seed defaults if empty
-  if (State.agents.length === 0) {
-    State.agents = [
-      { id: "kinetic", name: "KINETIC", desc: "Agent AI đa năng", icon: "⚡", status: "active", model: "Sonnet 5",
-        tools: ["Web Search","Browser","Code","Files","Terminal","Knowledge","Notes"], system: "Bạn là KINETIC, một agent AI tự chủ. Hãy lập kế hoạch, dùng công cụ và hoàn thành tác vụ." },
-      { id: "researcher", name: "Researcher", desc: "Nghiên cứu & tổng hợp", icon: "🔍", status: "active", model: "Sonnet 5",
-        tools: ["Web Search","Browser","Knowledge","Notes"], system: "Agent chuyên nghiên cứu." },
-      { id: "builder", name: "Builder", desc: "Xây dựng & code", icon: "🔨", status: "inactive", model: "Opus",
-        tools: ["Code","Files","Terminal"], system: "Agent chuyên viết code." },
-    ];
-  }
-  if (State.automations.length === 0) {
-    State.automations = [
-      { id: uid(), name: "Daily AI briefing", enabled: true, schedule: "Every day · 08:00", cron: "0 8 * * *", agent: "kinetic",
-        prompt: "Tổng hợp tin AI nổi bật hôm nay.", tools: ["Web Search","Knowledge","Notes"], lastRun: { status: "ok", at: new Date(Date.now()-3600000*20).toISOString() }, nextRun: new Date(Date.now()+3600000*4).toISOString(), history: [
-          { status: "ok", at: new Date(Date.now()-3600000*20).toISOString() }, { status: "ok", at: new Date(Date.now()-86400000).toISOString() }, { status: "warn", at: new Date(Date.now()-86400000*2).toISOString() } ] },
-      { id: uid(), name: "Monitor GitHub PRs", enabled: true, schedule: "Every 30 min", cron: "*/30 * * * *", agent: "kinetic",
-        prompt: "Kiểm tra PR mới và báo cáo.", tools: ["Web Search","Notes"], lastRun: { status: "ok", at: new Date(Date.now()-600000*25).toISOString() }, nextRun: new Date(Date.now()+600000*5).toISOString(), history: [
-          { status: "ok", at: new Date(Date.now()-600000*25).toISOString() } ] },
-      { id: uid(), name: "Weekly research summary", enabled: false, schedule: "Monday · 09:00", cron: "0 9 * * 1", agent: "researcher",
-        prompt: "Tổng hợp nghiên cứu tuần.", tools: ["Knowledge","Notes"], lastRun: null, nextRun: null, history: [] },
-    ];
-  }
 }
 function persist() {
   try {
     localStorage.setItem("kinetic_state", JSON.stringify({
       conversations: State.conversations.map(c => ({ ...c, messages: c.messages.map(m => ({ ...m, streaming: false })) })),
-      automations: State.automations, files: State.files, settings: State.settings,
+      settings: State.settings,
     }));
   } catch {}
 }
@@ -894,8 +879,9 @@ const API = {
   async health() {
     const r = await fetch("/api/health"); if (!r.ok) throw new Error("health"); return r.json();
   },
-  async createTask(prompt) {
-    const r = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
+  async createTask(payload) {
+    const body = typeof payload === "string" ? { prompt: payload } : payload;
+    const r = await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d;
   },
   async getTask(id) { const r = await fetch("/api/tasks/" + id); if (!r.ok) throw new Error("task"); return r.json(); },
@@ -903,9 +889,32 @@ const API = {
   async cancelTask(id) { const r = await fetch("/api/tasks/" + id + "/cancel", { method: "POST" }); return r.json(); },
   async resumeTask(id) { const r = await fetch("/api/tasks/" + id + "/resume", { method: "POST" }); return r.json(); },
   async outcome(id) { const r = await fetch("/api/tasks/" + id + "/outcome"); if (!r.ok) return null; return r.json(); },
+  async listApprovals(taskId) { const r = await fetch("/api/tasks/" + taskId + "/approvals"); if (!r.ok) return { approvals: [] }; return r.json(); },
+  async resolveApproval(taskId, reqId, allow) { const r = await fetch("/api/tasks/" + taskId + "/approvals/" + reqId + "/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allow }) }); return r.json(); },
+  // LLM provider config (base URL / proxy, model, interactive approval). The
+  // API key is sent here and held in-memory on the server; GET never returns it.
+  async getLLM() { const r = await fetch("/api/llm"); if (!r.ok) throw new Error("llm"); return r.json(); },
+  async setLLM(cfg) { const r = await fetch("/api/llm", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d; },
+  // Agents CRUD (persisted server-side).
+  async listAgents() { const r = await fetch("/api/agents"); if (!r.ok) throw new Error("agents"); return r.json(); },
+  async saveAgent(agent) { const r = await fetch("/api/agents" + (agent.id ? "/" + agent.id : ""), { method: agent.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(agent) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d; },
+  async deleteAgent(id) { const r = await fetch("/api/agents/" + id, { method: "DELETE" }); return r.ok; },
+  // Automations CRUD + run-now.
+  async listAutomations() { const r = await fetch("/api/automations"); if (!r.ok) throw new Error("automations"); return r.json(); },
+  async saveAutomation(a) { const r = await fetch("/api/automations" + (a.id ? "/" + a.id : ""), { method: a.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d; },
+  async deleteAutomation(id) { const r = await fetch("/api/automations/" + id, { method: "DELETE" }); return r.ok; },
+  async runAutomation(id) { const r = await fetch("/api/automations/" + id + "/run", { method: "POST" }); const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d; },
+  // Files (real upload to the workspace).
+  async listFiles() { const r = await fetch("/api/files"); if (!r.ok) throw new Error("files"); return r.json(); },
+  async uploadFile(file) {
+    const fd = new FormData(); fd.append("file", file);
+    const r = await fetch("/api/files", { method: "POST", body: fd });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d;
+  },
+  async deleteFile(id) { const r = await fetch("/api/files/" + id, { method: "DELETE" }); return r.ok; },
   events(id, onEvent, onEnd) {
     const es = new EventSource("/api/tasks/" + id + "/events");
-    const TYPES = ["agent_started","agent_message","agent_error","tool_started","tool_output","tool_finished","command_started","command_finished","file_changed","test_started","test_finished","task_completed","project_scanned","workspace_created","workspace_deleted","git_command_started","git_command_finished","dependency_detected","dependency_install_started","dependency_install_finished","environment_created","environment_started","environment_stopped","environment_destroyed","environment_failed","process_started","process_finished","process_cancelled","process_timeout","permission_denied","memory_created","memory_updated","memory_deleted","memory_invalidated","memory_retrieved","memory_consolidated","context_built","context_budget_exceeded","task_created","task_state_changed","task_planning_started","task_plan_created","task_step_started","task_step_completed","task_step_failed","task_verification_started","task_verification_completed","task_recovery_started","task_recovery_completed","task_replanned","task_cancelled","task_failed","task_checkpoint_created","failure_analyzed","repair_started","repair_completed","repair_failed","verification_retry","stuck_detected","regression_detected","final_review_started","final_review_completed","message"];
+    const TYPES = ["agent_started","agent_message","agent_error","tool_started","tool_output","tool_finished","command_started","command_finished","file_changed","test_started","test_finished","task_completed","project_scanned","workspace_created","workspace_deleted","git_command_started","git_command_finished","dependency_detected","dependency_install_started","dependency_install_finished","environment_created","environment_started","environment_stopped","environment_destroyed","environment_failed","process_started","process_finished","process_cancelled","process_timeout","permission_denied","memory_created","memory_updated","memory_deleted","memory_invalidated","memory_retrieved","memory_consolidated","context_built","context_budget_exceeded","task_created","task_state_changed","task_planning_started","task_plan_created","task_step_started","task_step_completed","task_step_failed","task_verification_started","task_verification_completed","task_recovery_started","task_recovery_completed","task_replanned","task_cancelled","task_failed","task_checkpoint_created","failure_analyzed","repair_started","repair_completed","repair_failed","verification_retry","stuck_detected","regression_detected","final_review_started","final_review_completed","permission_requested","permission_resolved","message"];
     TYPES.forEach(t => es.addEventListener(t, m => { let data = {}; try { data = JSON.parse(m.data); } catch {} onEvent(t, data); }));
     es.addEventListener("stream_end", () => { try { es.close(); } catch {} onEnd && onEnd(); });
     es.onerror = () => {}; // browser auto-reconnects
@@ -973,7 +982,17 @@ async function sendMessage(text) {
   conv.messages.push(aMsg);
 
   try {
-    const res = await API.createTask(text);
+    // Build the task payload with the currently-selected LLM config + agent.
+    const taskBody = { prompt: text };
+    const agent = State.agents.find(a => a.id === conv.agentId);
+    if (agent && agent.id) taskBody.agent_id = agent.id;
+    if (currentModel && currentModel !== "Auto") taskBody.model = MODEL_API[currentModel];
+    if (State.llm && State.llm.base_url) taskBody.base_url = State.llm.base_url;
+    // Send the in-memory API key only if the user entered one this session;
+    // otherwise the backend falls back to ANTHROPIC_API_KEY.
+    if (State.llm && State.llm._apiKey) taskBody.api_key = State.llm._apiKey;
+    if (State.settings.repair) taskBody.enable_repair = true;
+    const res = await API.createTask(taskBody);
     conv.taskId = res.task_id; conv.thinking = false; conv.planning = true; conv.agentState = "planning";
     conv.eventLog = [];
     renderChat(); renderSidebar();
@@ -1031,7 +1050,15 @@ function routeEvent(conv, type, data) {
       break;
     case "agent_started": conv.thinking = true; break;
     case "permission_denied": conv.waitingApproval = true; conv.agentState = "waiting";
-      ensureBlock(conv, "approval").data = { tool: data.tool, reason: data.reason }; break;
+      ensureBlock(conv, "approval").data = { tool: data.tool, reason: data.reason, request_id: data.request_id, denied: true }; break;
+    case "permission_requested":
+      conv.waitingApproval = true; conv.agentState = "waiting";
+      ensureBlock(conv, "approval").data = { tool: data.tool, reason: data.reason, request_id: data.request_id };
+      break;
+    case "permission_resolved":
+      conv.waitingApproval = false;
+      { const blk = (conv.messages[conv.messages.length-1]||{}).blocks; /* resolved by re-render */ }
+      break;
     case "agent_error":
       if (aMsg) aMsg.blocks.push({ type: "error", title: "Lỗi agent", body: data.reason || data.error || "Lỗi không xác định", detail: data.reason });
       break;
@@ -1279,15 +1306,21 @@ function renderToolCard(tc) {
 }
 function renderApproval(data) {
   const c = el("div", "approval-card");
+  const rid = data.request_id;
   c.innerHTML = `<div class="ac-head">⚠ KINETIC cần bạn xác nhận</div>
     <div class="ac-body">Agent muốn thực hiện: <strong>${esc(data.tool || "hành động")}</strong>${data.reason ? "<br><small>" + esc(data.reason) + "</small>" : ""}</div>
     <div class="ac-actions">
-      <button class="btn primary sm" data-a="once">Cho phép lần này</button>
-      <button class="btn sm" data-a="task">Cho phép trong tác vụ</button>
+      <button class="btn primary sm" data-a="once">Cho phép</button>
       <button class="btn danger sm" data-a="deny">Từ chối</button>
     </div>`;
-  c.querySelector('[data-a="once"]').onclick = () => { toast("Đã cho phép (mô phỏng)", "ok"); c.remove(); const conv = getConv(); if (conv) conv.waitingApproval = false; };
-  c.querySelector('[data-a="deny"]').onclick = () => { toast("Đã từ chối"); c.remove(); };
+  const resolve = (allow) => {
+    const conv = getConv();
+    if (conv && rid && conv.taskId) {
+      API.resolveApproval(conv.taskId, rid, allow).then(() => { c.remove(); if (conv) conv.waitingApproval = false; }).catch(() => toast("Không gửi được", "err"));
+    } else { c.remove(); const conv2 = getConv(); if (conv2) conv2.waitingApproval = false; toast(allow ? "Đã cho phép" : "Đã từ chối"); }
+  };
+  c.querySelector('[data-a="once"]').onclick = () => resolve(true);
+  c.querySelector('[data-a="deny"]').onclick = () => resolve(false);
   return c;
 }
 function renderErrorCard(data, title, body, detail) {
@@ -1379,12 +1412,16 @@ function fmtSize(b) { if (!b) return "?"; if (b < 1024) return b + " B"; if (b <
 function addFiles(files) {
   const conv = getConv();
   for (const f of files) {
-    const item = { name: f.name, size: f.size, type: f.type, file: f };
-    if (conv) { conv.attachments = conv.attachments || []; conv.attachments.push(item); }
-    else pendingAttachments.push(item);
-    State.files.unshift({ id: uid(), name: f.name, size: f.size, type: f.type, icon: fileIcon(f), at: new Date().toISOString() });
+    // Real upload to the backend workspace; the returned entry is added to the
+    // Files list and attached to the active conversation.
+    API.uploadFile(f).then(entry => {
+      const item = { id: entry.id, name: entry.name, size: entry.size, type: entry.content_type, path: entry.path, icon: fileIcon(f), at: entry.created_at };
+      if (conv) { conv.attachments = conv.attachments || []; conv.attachments.push(item); }
+      else pendingAttachments.push(item);
+      State.files.unshift(item);
+      renderAttachments(); renderFiles();
+    }).catch(e => toast("Tải lên thất bại: " + e.message, "err"));
   }
-  renderAttachments(); renderFiles(); persist();
 }
 
 /* ============================================================
@@ -1431,26 +1468,41 @@ function updateActivityDrawer() {
    ============================================================ */
 function renderAgents() {
   const grid = $("#agents-grid"); grid.innerHTML = "";
+  if (State.agents.length === 0) { grid.innerHTML = '<div class="empty-strip" style="grid-column:1/-1">Chưa có agent nào. Nhấn "Agent mới" để tạo.</div>'; return; }
   for (const a of State.agents) {
     const c = el("div", "card");
-    c.innerHTML = `<div class="card-head"><div class="c-ico">${a.icon}</div><div><div class="c-title">${esc(a.name)}</div><div class="c-sub">${esc(a.desc)}</div></div></div>
+    c.innerHTML = `<div class="card-head"><div class="c-ico">${esc(a.icon || "🤖")}</div><div><div class="c-title">${esc(a.name)}</div><div class="c-sub">${esc(a.desc || "")}</div></div></div>
       <div class="c-body"><span class="status-pill ${a.status === "active" ? "on" : "off"}"><span class="dot"></span>${a.status === "active" ? "Active" : "Inactive"}</span></div>
-      <div class="c-tags">${a.tools.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>
-      <div class="c-actions"><button class="btn sm" data-act="open">Mở</button><button class="btn sm" data-act="cfg">Cấu hình</button></div>`;
+      <div class="c-tags">${(a.tools || []).map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+      <div class="c-actions"><button class="btn sm" data-act="open">Mở</button><button class="btn sm" data-act="cfg">Cấu hình</button><button class="btn sm" data-act="del">Xoá</button></div>`;
     c.querySelector('[data-act="cfg"]').onclick = () => agentConfig(a);
-    c.querySelector('[data-act="open"]').onclick = () => { newConversation("Chat với " + a.name); };
+    c.querySelector('[data-act="open"]').onclick = () => { const conv = newConversation("Chat với " + a.name); conv.agentId = a.id; };
+    c.querySelector('[data-act="del"]').onclick = () => deleteAgent(a);
     grid.appendChild(c);
   }
 }
+function deleteAgent(a) {
+  API.deleteAgent(a.id).then(ok => { if (ok) { State.agents = State.agents.filter(x => x.id !== a.id); renderAgents(); toast("Đã xoá agent"); } else toast("Không xoá được", "err"); }).catch(() => toast("Lỗi xoá", "err"));
+}
 function agentConfig(a) {
-  openModal("Cấu hình " + a.name, `
-    <div class="form-row"><label>Tên</label><input id="ag-name" value="${esc(a.name)}"></div>
-    <div class="form-row"><label>Mô tả</label><input id="ag-desc" value="${esc(a.desc)}"></div>
+  const isNew = !a.id;
+  openModal(isNew ? "Agent mới" : "Cấu hình " + a.name, `
+    <div class="form-row"><label>Tên</label><input id="ag-name" value="${esc(a.name || "")}"></div>
+    <div class="form-row"><label>Mô tả</label><input id="ag-desc" value="${esc(a.desc || "")}"></div>
+    <div class="form-row"><label>Icon</label><input id="ag-icon" value="${esc(a.icon || "🤖")}"></div>
     <div class="form-row"><label>Mô hình</label><select id="ag-model"><option>Sonnet 5</option><option>Haiku</option><option>Opus</option><option>Auto</option></select></div>
-    <div class="form-row"><label>Hệ thống</label><textarea id="ag-sys">${esc(a.system)}</textarea></div>
+    <div class="form-row"><label>Hệ thống</label><textarea id="ag-sys">${esc(a.system || "")}</textarea></div>
     <div class="modal-foot"><button class="btn" data-act="cancel">Huỷ</button><button class="btn primary" data-act="save">Lưu</button></div>`);
-  $("#ag-model").value = a.model;
-  $('[data-act="save"]').onclick = () => { a.name = $("#ag-name").value; a.desc = $("#ag-desc").value; a.model = $("#ag-model").value; a.system = $("#ag-sys").value; persist(); renderAgents(); closeModal(); toast("Đã lưu", "ok"); };
+  $("#ag-model").value = a.model || "Sonnet 5";
+  $('[data-act="save"]').onclick = () => {
+    const payload = { name: $("#ag-name").value, description: $("#ag-desc").value, icon: $("#ag-icon").value, model: $("#ag-model").value === "Auto" ? null : $("#ag-model").value, system_prompt: $("#ag-sys").value };
+    if (!isNew) payload.id = a.id;
+    API.saveAgent(payload).then(saved => {
+      if (isNew) { State.agents.push({ id: saved.id, name: saved.name, desc: saved.description, icon: saved.icon, status: saved.active ? "active" : "inactive", model: saved.model || "Sonnet 5", tools: saved.tools || [], system: saved.system_prompt || "" }); }
+      else { const idx = State.agents.findIndex(x => x.id === a.id); if (idx >= 0) State.agents[idx] = { id: saved.id, name: saved.name, desc: saved.description, icon: saved.icon, status: saved.active ? "active" : "inactive", model: saved.model || "Sonnet 5", tools: saved.tools || [], system: saved.system_prompt || "" }; }
+      renderAgents(); closeModal(); toast("Đã lưu", "ok");
+    }).catch(e => toast("Lỗi: " + e.message, "err"));
+  };
   $('[data-act="cancel"]').onclick = closeModal;
 }
 
@@ -1476,30 +1528,41 @@ function renderAutomations(home) {
       <div class="c-actions"><button class="btn primary sm" data-act="run">Chạy ngay</button><button class="btn sm" data-act="edit">Sửa</button><button class="btn sm" data-act="toggle">${a.enabled ? "Tắt" : "Bật"}</button></div>`;
     c.querySelector('[data-act="run"]').onclick = () => runAutomation(a);
     c.querySelector('[data-act="edit"]').onclick = () => editAutomation(a);
-    c.querySelector('[data-act="toggle"]').onclick = () => { a.enabled = !a.enabled; persist(); renderAutomations(); toast(a.enabled ? "Đã bật" : "Đã tắt"); };
+    c.querySelector('[data-act="toggle"]').onclick = () => { API.saveAutomation({ id: a.id, name: a.name, cron: a.cron, schedule_label: a.schedule, prompt: a.prompt, agent_id: a.agent || null, enabled: !a.enabled }).then(saved => { a.enabled = saved.enabled; renderAutomations(); toast(a.enabled ? "Đã bật" : "Đã tắt"); }).catch(() => toast("Lỗi", "err")); };
     grid.appendChild(c);
   }
 }
 function runAutomation(a) {
   toast("Đang chạy: " + a.name + "…");
-  // kicks a real task via the agent
-  newConversation(a.name); sendMessage(a.prompt);
+  API.runAutomation(a.id).then(res => {
+    const conv = newConversation(a.name); conv.taskId = res.task_id; conv.planning = true; conv.agentState = "planning"; conv.eventLog = [];
+    const aMsg = { id: uid(), role: "agent", text: "", at: new Date().toISOString(), streaming: true, blocks: [] }; conv.messages.push(aMsg);
+    renderChat(); renderSidebar(); openEventStream(conv);
+  }).catch(e => toast("Lỗi chạy: " + e.message, "err"));
 }
 function editAutomation(a) {
-  openModal(a ? "Sửa automation" : "Tự động hoá mới", `
+  const isNew = !a;
+  openModal(isNew ? "Tự động hoá mới" : "Sửa automation", `
     <div class="form-row"><label>Tên</label><input id="au-name" value="${esc(a?.name || "")}"></div>
-    <div class="form-row"><label>Lịch (cron, mô tả)</label><input id="au-sched" value="${esc(a?.schedule || "")}" placeholder="Every day · 08:00"></div>
+    <div class="form-row"><label>Lịch (mô tả)</label><input id="au-sched" value="${esc(a?.schedule || "")}" placeholder="Every day · 08:00"></div>
     <div class="form-row"><label>Cron</label><input id="au-cron" value="${esc(a?.cron || "")}" placeholder="0 8 * * *"></div>
     <div class="form-row"><label>Prompt</label><textarea id="au-prompt">${esc(a?.prompt || "")}</textarea></div>
     <div class="modal-foot"><button class="btn" data-act="cancel">Huỷ</button>${a ? '<button class="btn danger" data-act="del">Xoá</button>' : ""}<button class="btn primary" data-act="save">Lưu</button></div>`);
   $('[data-act="save"]').onclick = () => {
     const name = $("#au-name").value.trim(); if (!name) return;
-    if (a) { a.name = name; a.schedule = $("#au-sched").value; a.cron = $("#au-cron").value; a.prompt = $("#au-prompt").value; }
-    else { State.automations.unshift({ id: uid(), name, schedule: $("#au-sched").value, cron: $("#au-cron").value, prompt: $("#au-prompt").value, enabled: true, agent: "kinetic", tools: [], lastRun: null, nextRun: null, history: [] }); }
-    persist(); renderAutomations(); closeModal(); toast("Đã lưu", "ok");
+    const payload = { name, schedule_label: $("#au-sched").value, cron: $("#au-cron").value, prompt: $("#au-prompt").value, agent_id: (a && a.agent) || null, enabled: a ? a.enabled : true };
+    if (a) payload.id = a.id;
+    API.saveAutomation(payload).then(saved => {
+      const mapped = { id: saved.id, name: saved.name, enabled: saved.enabled, schedule: saved.schedule_label || saved.cron || "", cron: saved.cron || "", agent: saved.agent_id || "", prompt: saved.prompt, tools: [], lastRun: saved.last_run_at ? { status: saved.last_run_status || "ok", at: saved.last_run_at } : null, nextRun: saved.next_run_at, history: saved.history || [] };
+      if (a) { const idx = State.automations.findIndex(x => x.id === a.id); if (idx >= 0) State.automations[idx] = mapped; }
+      else { State.automations.unshift(mapped); }
+      renderAutomations(); renderAutomations(true); closeModal(); toast("Đã lưu", "ok");
+    }).catch(e => toast("Lỗi: " + e.message, "err"));
   };
   $('[data-act="cancel"]').onclick = closeModal;
-  if (a) $('[data-act="del"]').onclick = () => { State.automations = State.automations.filter(x => x.id !== a.id); persist(); renderAutomations(); closeModal(); toast("Đã xoá"); };
+  if (a) $('[data-act="del"]').onclick = () => {
+    API.deleteAutomation(a.id).then(ok => { if (ok) { State.automations = State.automations.filter(x => x.id !== a.id); renderAutomations(); renderAutomations(true); closeModal(); toast("Đã xoá"); } else toast("Không xoá được", "err"); }).catch(() => toast("Lỗi xoá", "err"));
+  };
 }
 
 function renderFiles() {
@@ -1509,7 +1572,7 @@ function renderFiles() {
     const c = el("div", "card");
     c.innerHTML = `<div class="card-head"><div class="c-ico">${f.icon || "📎"}</div><div><div class="c-title">${esc(f.name)}</div><div class="c-sub">${fmtSize(f.size)} · ${relTime(f.at)}</div></div></div>
       <div class="c-actions"><button class="btn sm" data-act="open">Mở</button><button class="btn sm" data-act="attach">Đính kèm</button><button class="btn sm" data-act="del">Xoá</button></div>`;
-    c.querySelector('[data-act="del"]').onclick = () => { State.files = State.files.filter(x => x.id !== f.id); persist(); renderFiles(); };
+    c.querySelector('[data-act="del"]').onclick = () => { API.deleteFile(f.id).then(ok => { if (ok) { State.files = State.files.filter(x => x.id !== f.id); renderFiles(); toast("Đã xoá"); } else toast("Không xoá được", "err"); }).catch(() => toast("Lỗi xoá", "err")); };
     c.querySelector('[data-act="attach"]').onclick = () => { const conv = getConv() || newConversation(f.name.slice(0, 30)); conv.attachments = conv.attachments || []; conv.attachments.push(f); showView("chat"); renderAttachments(); toast("Đã đính kèm"); };
     grid.appendChild(c);
   }
@@ -1603,8 +1666,17 @@ async function checkHealth() {
   }
 }
 function renderSettingsStatus() {
-  const s = State.health;
-  $("#set-key-status").textContent = s.key === null ? "Không xác định" : (s.key ? "Đã cấu hình ✓" : "Chưa set ✗");
+  const llm = State.llm || {};
+  const envSet = !!llm.env_api_key_set;
+  const overrideSet = !!llm.api_key_set;
+  const parts = [];
+  parts.push(envSet ? "env key ✓" : "env key ✗");
+  if (overrideSet) parts.push("override key ✓");
+  const interactive = !!llm.interactive_approval;
+  const el = $("#set-key-status");
+  if (el) el.textContent = parts.join(" · ") + (interactive ? " · duyệt tool: bật" : " · duyệt tool: tắt");
+  const cb = $("#set-interactive");
+  if (cb) cb.checked = interactive;
 }
 
 /* ============================================================
@@ -1660,6 +1732,9 @@ function openToolsMenu(btn) {
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 10);
 }
 const MODELS = [{ name: "Sonnet 5", desc: "Cân bằng", tag: "Balanced" }, { name: "Haiku", desc: "Nhanh", tag: "Fast" }, { name: "Opus", desc: "Lý luận mạnh", tag: "Reasoning" }, { name: "Auto", desc: "Tự chọn", tag: "Auto" }];
+// Map friendly model names to real model identifiers sent to the backend.
+// "Auto" is intentionally absent so the backend uses its configured default.
+const MODEL_API = { "Sonnet 5": "claude-sonnet-4-5-20250929", "Haiku": "claude-haiku-4-5-20251001", "Opus": "claude-opus-4-1-20250805" };
 let currentModel = "Sonnet 5";
 function openModelMenu(btn) {
   closeMenu();
@@ -1706,14 +1781,15 @@ function init() {
   // file input
   $("#file-input").addEventListener("change", (e) => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ""; });
   $("#upload-file-btn").addEventListener("click", () => $("#file-input").click());
-  $("#add-agent-btn").addEventListener("click", () => agentConfig({ id: uid(), name: "Agent mới", desc: "", icon: "🤖", status: "inactive", model: "Sonnet 5", tools: [], system: "" }));
+  $("#add-agent-btn").addEventListener("click", () => agentConfig({ id: "", name: "Agent mới", desc: "", icon: "🤖", active: false, model: "Sonnet 5", tools: [], system_prompt: "" }));
   $("#add-automation-btn").addEventListener("click", () => editAutomation(null));
   // settings
-  $("#set-dark").addEventListener("change", (e) => { State.settings.dark = e.target.checked; persist(); });
+  $("#set-dark").addEventListener("change", (e) => { State.settings.dark = e.target.checked; applyTheme(); persist(); });
   $("#set-anim").addEventListener("change", (e) => { State.settings.anim = e.target.checked; document.body.style.setProperty("--ease", e.target.checked ? "" : "linear"); persist(); });
   $("#set-model").addEventListener("change", (e) => { State.settings.model = e.target.value; currentModel = e.target.value; persist(); });
   $("#set-repair").addEventListener("change", (e) => { State.settings.repair = e.target.checked; persist(); });
-  $("#set-key-btn").addEventListener("click", () => toast("API key được đặt qua biến môi trường ANTHROPIC_API_KEY"));
+  $("#set-key-btn").addEventListener("click", saveLLMConfig);
+  $("#set-interactive").addEventListener("change", (e) => { API.setLLM({ interactive_approval: e.target.checked }).then(() => { State.llm.interactive_approval = e.target.checked; renderSettingsStatus(); }).catch(() => toast("Không lưu được", "err")); });
   // code copy delegation
   document.addEventListener("click", (e) => { if (e.target.classList?.contains("copy-code")) { navigator.clipboard.writeText(decodeURIComponent(e.target.dataset.code || "")); toast("Đã sao chép code", "ok"); } });
   // keyboard & drag
@@ -1722,7 +1798,9 @@ function init() {
   renderSidebar(); renderAutomations(true); renderAgents(); renderAutomations(); renderFiles();
   if (State.activeId) { showView("chat"); renderChat(); } else { showView("home"); }
   checkHealth(); setInterval(checkHealth, 12000);
-  // restore running tasks: reattach SSE for non-terminal conversations with taskId
+  // Load server-side resources (agents, automations, files, LLM config) and
+  // re-attach SSE for any in-flight task from this browser session.
+  loadBackendResources();
   for (const c of State.conversations) {
     if (c.taskId && !TERMINAL.has(c.agentState) && !c.es) {
       c._finalized = false;
@@ -1731,6 +1809,43 @@ function init() {
   }
 }
 document.addEventListener("DOMContentLoaded", init);
+
+async function loadBackendResources() {
+  // Agents
+  try { const d = await API.listAgents(); State.agents = (d.agents || []).map(a => ({ id: a.id, name: a.name, desc: a.description, icon: a.icon, status: a.active ? "active" : "inactive", model: a.model || "Sonnet 5", tools: a.tools || [], system: a.system_prompt || "" })); renderAgents(); } catch {}
+  // Automations
+  try { const d = await API.listAutomations(); State.automations = (d.automations || []).map(a => ({ id: a.id, name: a.name, enabled: a.enabled, schedule: a.schedule_label || a.cron || "", cron: a.cron || "", agent: a.agent_id || "", prompt: a.prompt, tools: [], lastRun: a.last_run_at ? { status: a.last_run_status || "ok", at: a.last_run_at } : null, nextRun: a.next_run_at, history: a.history || [] })); renderAutomations(); renderAutomations(true); } catch {}
+  // Files
+  try { const d = await API.listFiles(); State.files = (d.files || []).map(f => ({ id: f.id, name: f.name, size: f.size, type: f.content_type, path: f.path, at: f.created_at })); renderFiles(); } catch {}
+  // LLM config (GET never returns the key — only a boolean flag)
+  try { const cfg = await API.getLLM(); State.llm = { base_url: cfg.base_url, model: cfg.model, api_key_set: !!cfg.api_key_set, env_api_key_set: !!cfg.env_api_key_set, interactive_approval: !!cfg.interactive_approval, _apiKey: State.llm ? State.llm._apiKey : null }; renderLLMSettings(); } catch {}
+}
+
+async function saveLLMConfig() {
+  const base = ($("#llm-base").value || "").trim();
+  const key = ($("#llm-key").value || "").trim();
+  const model = $("#set-model").value;
+  try {
+    const cfg = { base_url: base || "", model };
+    if (key) cfg.api_key = key; // empty string clears; non-empty sets (in-memory only)
+    const out = await API.setLLM(cfg);
+    State.llm = { base_url: out.base_url, model: out.model, api_key_set: !!out.api_key_set, env_api_key_set: !!out.env_api_key_set, interactive_approval: !!out.interactive_approval, _apiKey: key ? key : null };
+    $("#llm-key").value = "";
+    renderLLMSettings();
+    toast(key ? "Đã lưu cấu hình LLM (API key chỉ giữ trong phiên)" : "Đã lưu cấu hình LLM", "ok");
+  } catch (e) { toast("Lỗi: " + e.message, "err"); }
+}
+
+function renderLLMSettings() {
+  if (!State.llm) return;
+  const llm = State.llm;
+  if ($("#llm-base")) $("#llm-base").value = llm.base_url || "";
+  renderSettingsStatus();
+}
+
+function applyTheme() {
+  document.body.classList.toggle("light", !State.settings.dark);
+}
 </script>
 </body>
 </html>

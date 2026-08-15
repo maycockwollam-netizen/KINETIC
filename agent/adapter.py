@@ -81,6 +81,11 @@ class AgentAdapter:
         max_budget_usd: float | None = None,
         system_prompt: str | None = None,
         extra_allowed_tools: list[str] | None = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        interactive_approval: bool = False,
+        approval_registry: Any = None,
+        approval_timeout: float = 300.0,
     ) -> None:
         if _IMPORT_ERROR is not None:
             raise AgentError(
@@ -92,6 +97,11 @@ class AgentAdapter:
         self._events = events
         self._cwd = Path(cwd).resolve()
         self._model = model
+        self._base_url = base_url
+        self._api_key = api_key
+        self._interactive_approval = interactive_approval
+        self._approval_registry = approval_registry
+        self._approval_timeout = approval_timeout
         self._client: Any = None
         self._options = self._build_options(
             model=model,
@@ -101,6 +111,8 @@ class AgentAdapter:
             max_budget_usd=max_budget_usd,
             system_prompt=system_prompt,
             extra_allowed_tools=extra_allowed_tools,
+            base_url=base_url,
+            api_key=api_key,
         )
 
     # --- public API ---------------------------------------------------------
@@ -166,6 +178,8 @@ class AgentAdapter:
         max_budget_usd: float | None,
         system_prompt: str | None,
         extra_allowed_tools: list[str] | None,
+        base_url: str | None = None,
+        api_key: str | None = None,
     ) -> Any:
         sdk_tools = [_to_sdk_tool(t) for t in self._registry.all()]
         server = create_sdk_mcp_server(name=MCP_SERVER_NAME, version="1.0.0", tools=sdk_tools)
@@ -181,6 +195,16 @@ class AgentAdapter:
             "allowed_tools": allowed,
             "can_use_tool": self._can_use_tool,
         }
+        # Forward LLM provider overrides to the Claude Code subprocess via env
+        # vars. The API key is only ever placed in the subprocess env (never
+        # logged, never persisted). base_url enables proxies/gateways.
+        env_overrides: dict[str, str] = {}
+        if base_url:
+            env_overrides["ANTHROPIC_BASE_URL"] = base_url
+        if api_key:
+            env_overrides["ANTHROPIC_API_KEY"] = api_key
+        if env_overrides:
+            kwargs["env"] = env_overrides
         if max_turns is not None:
             kwargs["max_turns"] = max_turns
         if fallback_model is not None:
@@ -197,7 +221,9 @@ class AgentAdapter:
         """Runtime permission gate invoked by the SDK before each tool call.
 
         This is the real security boundary: it runs *before* the tool, regardless
-        of prompt instructions. Decisions are audited.
+        of prompt instructions. Decisions are audited. When interactive approval
+        is enabled, an allowed tool still awaits a human decision — interactive
+        approval never relaxes the static policy, it only adds a checkpoint.
         """
         # SDK exposes MCP tools as mcp__server__name; strip to our registry name.
         local = tool_name.split("__")[-1] if "__" in tool_name else tool_name
@@ -210,7 +236,24 @@ class AgentAdapter:
             self._policy.require(tool_name, defn.permission, tool_input)
         except PermissionDeniedError as exc:
             self._audit.record(session_id=session_id, action="permission", tool=tool_name, allowed=False, reason=exc.reason)
+            self._events.emit(EventType.PERMISSION_DENIED, session_id, tool=tool_name, reason=exc.reason)
             return PermissionResultDeny(message=exc.reason)
+        # Static policy allowed the tool. If interactive approval is on, ask the
+        # human before proceeding (bounded by a timeout; timeout => deny).
+        if self._interactive_approval and self._approval_registry is not None:
+            req = self._approval_registry.request(
+                task_id=session_id, tool=tool_name, tool_input=tool_input,
+                reason=getattr(defn, "description", "") or "",
+            )
+            allowed = await self._approval_registry.await_decision(req, timeout=self._approval_timeout)
+            self._audit.record(
+                session_id=session_id, action="permission", tool=tool_name,
+                allowed=allowed, reason="interactive:" + ("allow" if allowed else "deny"),
+            )
+            if not allowed:
+                self._events.emit(EventType.PERMISSION_DENIED, session_id, tool=tool_name, reason="denied by user")
+                return PermissionResultDeny(message="denied by user")
+            return PermissionResultAllow(updated_input=tool_input)
         self._audit.record(session_id=session_id, action="permission", tool=tool_name, allowed=True)
         return PermissionResultAllow(updated_input=tool_input)
 

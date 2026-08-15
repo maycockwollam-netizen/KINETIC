@@ -694,5 +694,79 @@ is the center; agent capabilities appear around the conversation.
   `bindComposer(id, sendId, attachId)` + `sendMessage`. Suggestion chips
   create a new conversation AND pre-fill the chat composer.
 
+## Phase 7.3+ scope (DONE — replacing demo web surfaces with real ones)
+The front-end redesign shipped a polished UI, but most surfaces were mock:
+base URL/proxy support was absent, the API key was a non-functional toast,
+the model dropdown was never sent, Agents/Automations/Files were localStorage
+seeded with fake data, and the approval card was a simulation. This phase
+makes them real — wired to new backend endpoints over the existing safe path.
+NO new execution path: tasks still run Agent → AgentSession → PermissionPolicy
+→ ToolRegistry → Tool → Environment → Runtime. NO subprocess/filesystem
+mutation in the web layer (security test enforced).
+- `config/settings.py`: `llm_base_url` (http(s) validated, forwarded to the
+  Claude subprocess via `ANTHROPIC_BASE_URL` env) + `web_approval_timeout`
+  (bounded 1..3600). The API key is NEVER a settings field (env or in-memory).
+- `agent/session.py`: `SessionConfig` gains `base_url`, `api_key`,
+  `interactive_approval`, `enable_repair` (per-task overrides).
+- `agent/adapter.py`: `_build_options` forwards base_url/api_key via
+  `ClaudeAgentOptions(env={...})` (proxy/gateway support). `_can_use_tool` now
+  has an interactive branch: when enabled, an allowed tool still awaits a human
+  decision via the registry (bounded timeout → deny); interactive approval
+  NEVER relaxes the static policy — it only adds a checkpoint on top.
+- `agent/approvals.py`: `PendingApprovalRegistry` (in-memory) + events
+  `PERMISSION_REQUESTED`/`PERMISSION_RESOLVED`. Adapter awaits a future that
+  resolves via the API; timeout auto-denies so a forgotten approval can't
+  stall the agent loop forever.
+- `store/` package: `JsonStore` (atomic JSON files under ~/.kinetic) +
+  models (`AgentConfig`/`AutomationConfig`/`FileEntry`) + `files.py` upload
+  service. The web layer calls store methods — no filesystem writes appear in
+  `web/*.py` (security test `test_no_filesystem_mutation_in_web_layer` passes).
+  Corrupt stores fail closed (`StoreError`), never silent-reset.
+- `web/console.py`: WebConsole owns the stores + an in-memory LLM config +
+  a PendingApprovalRegistry. `create_task` accepts per-task overrides
+  (model/base_url/api_key/agent_id/interactive_approval/enable_repair).
+  API key resolution: per-task > console override > env; held in memory only,
+  NEVER persisted, NEVER returned (only `api_key_set` boolean). Agents/
+  automations CRUD persisted server-side; automations "run now" creates a
+  REAL task and records honest `last_run_at`/history (no faked next_run — a
+  background cron scheduler is NOT part of the web console). File uploads
+  land in `<workspace>/.kinetic_uploads/` (name-sanitized, size-bounded).
+- `web/app.py`: new routes — `/api/llm` (GET/PUT), `/api/agents` &
+  `/api/agents/{id}` (GET/POST/PUT/DELETE), `/api/automations[/{id}[/run]]`,
+  `/api/files` (GET/POST/DELETE), `/api/tasks/{id}/approvals[/{req}/resolve]`.
+  All responses scrubbed; the API key never appears in any response.
+- `web/static/index.html`: API adapter extended with real calls. `sendMessage`
+  now sends model/base_url/api_key/agent_id/enable_repair. Settings has real
+  base-URL + API-key + interactive-approval inputs. Agents/automations/files
+  render from backend data + call backend on CRUD/upload/run. Approval card
+  calls `resolveApproval`. Fake seed data REMOVED; `loadPersisted` only keeps
+  conversations + UI settings client-side. `MODEL_API` maps friendly names to
+  real model IDs ("Auto" omits the field so the backend default is used).
+- `pyproject.toml`: `store` added to hatchling `only-include`.
+775 tests pass (760 prior + 15 new `test_phase7_3_plus_web.py`). 17 skipped.
+Ruff clean. Wheel builds + installs with `store` package. No secrets committed.
+
+## Phase 7.3+ gotchas
+- The API key is held in-memory ONLY (`WebConsole._llm_api_key`) for the
+  process lifetime; it is never written to a settings file or store. GET
+  `/api/llm` returns `api_key_set` (bool), never the value. The front-end
+  keeps a `_apiKey` in JS memory only to re-send on subsequent task creates.
+- The 32-hex `task_id` matches the SecretDetector's `token_blob` pattern, so
+  the scrub layer masks it inside automation/list responses (e.g.
+  `last_run_task_id` becomes `<redacted>` on the wire). The frontend gets the
+  task_id from the create/run response (which preserves it via the identifier
+  exemption is NOT applied to nested dict values) — tests must compare via the
+  un-scrubbed run response, not the GET automation response.
+- Interactive approval is OPT-IN (default off) so existing tests/behavior are
+  unchanged. When on, `can_use_tool` blocks the agent loop on an asyncio
+  future resolved by `POST /api/tasks/{id}/approvals/{req}/resolve`; a
+  `web_approval_timeout` (default 300s) auto-denies to avoid stalls.
+- File upload writes happen in `store/files.py`, NOT `web/console.py` or
+  `web/app.py` — the security test greps `web/*.py` for `.write_bytes(` etc.
+  `console.save_upload` delegates to `store.files.save_upload_file`.
+- Automations have NO background scheduler. "Run now" kicks a real task and
+  records honest `last_run_at`/history; `next_run_at` stays None (a real cron
+  engine would be a separate worker, out of scope for the web console).
+
 ## TODO Phase 8
 Not started.

@@ -82,6 +82,9 @@ class EventType(StrEnum):
     REGRESSION_DETECTED = "regression_detected"
     FINAL_REVIEW_STARTED = "final_review_started"
     FINAL_REVIEW_COMPLETED = "final_review_completed"
+    # Phase 7.3+ — interactive (human-in-the-loop) tool approval
+    PERMISSION_REQUESTED = "permission_requested"
+    PERMISSION_RESOLVED = "permission_resolved"
 
 
 @dataclass

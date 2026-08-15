@@ -88,8 +88,24 @@ async def create_task(request: Request) -> Response:
     prompt = payload.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         return _safe_error("field 'prompt' is required and must be a non-empty string", 400)
+    # Optional per-task overrides. ``api_key`` is held in memory only; the
+    # response never echoes it back.
+    model = payload.get("model")
+    base_url = payload.get("base_url")
+    api_key = payload.get("api_key")
+    agent_id = payload.get("agent_id")
+    interactive_approval = payload.get("interactive_approval")
+    enable_repair = payload.get("enable_repair")
     try:
-        result = await console.create_task(prompt=prompt)
+        result = await console.create_task(
+            prompt=prompt,
+            model=model if isinstance(model, str) and model else None,
+            base_url=base_url if isinstance(base_url, str) and base_url else None,
+            api_key=api_key if isinstance(api_key, str) and api_key else None,
+            agent_id=agent_id if isinstance(agent_id, str) and agent_id else None,
+            interactive_approval=bool(interactive_approval) if interactive_approval is not None else None,
+            enable_repair=bool(enable_repair) if enable_repair is not None else None,
+        )
     except KINETICError as exc:
         return _safe_error(str(exc), 403 if "ANTHROPIC_API_KEY" in str(exc) else 500)
     except ValueError as exc:
@@ -250,6 +266,193 @@ async def task_outcome(request: Request) -> Response:
     return JSONResponse(snapshot)
 
 
+# --- configuration & resource routes ----------------------------------------
+# These back the new web surfaces: LLM config (proxy/base_url + model),
+# agents CRUD, automations CRUD + run-now, file uploads, and interactive
+# tool approvals. All responses are scrubbed; the API key is never echoed.
+
+
+async def get_llm_config(request: Request) -> JSONResponse:
+    console: WebConsole = request.app.state.console
+    return JSONResponse(scrub(console.get_llm_config()))
+
+
+async def set_llm_config(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    try:
+        payload = await _read_json(request)
+    except ValueError as exc:
+        return _safe_error(str(exc), 400)
+    if not isinstance(payload, dict):
+        return _safe_error("request body must be a JSON object", 400)
+    try:
+        result = console.set_llm_config(
+            base_url=payload.get("base_url"),
+            api_key=payload.get("api_key"),
+            model=payload.get("model"),
+            interactive_approval=payload.get("interactive_approval"),
+        )
+    except ValueError as exc:
+        return _safe_error(str(exc), 400)
+    except KINETICError as exc:
+        return _safe_error(str(exc), 500)
+    return JSONResponse(scrub(result))
+
+
+async def list_agents(request: Request) -> JSONResponse:
+    console: WebConsole = request.app.state.console
+    return JSONResponse(scrub({"agents": console.list_agents()}))
+
+
+async def create_or_update_agent(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    try:
+        payload = await _read_json(request)
+    except ValueError as exc:
+        return _safe_error(str(exc), 400)
+    if not isinstance(payload, dict):
+        return _safe_error("request body must be a JSON object", 400)
+    try:
+        result = console.save_agent(payload)
+    except KINETICError as exc:
+        return _safe_error(str(exc), 500)
+    except Exception as exc:  # noqa: BLE001
+        return _safe_error(f"failed to save agent: {type(exc).__name__}", 500)
+    return JSONResponse(scrub(result), status_code=201)
+
+
+async def get_agent(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    agent_id = request.path_params["agent_id"]
+    result = console.get_agent(agent_id)
+    if result is None:
+        return _safe_error(f"unknown agent: {agent_id}", 404)
+    return JSONResponse(scrub(result))
+
+
+async def delete_agent(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    agent_id = request.path_params["agent_id"]
+    if not console.delete_agent(agent_id):
+        return _safe_error(f"unknown agent: {agent_id}", 404)
+    return JSONResponse({"deleted": True, "id": agent_id})
+
+
+async def list_automations(request: Request) -> JSONResponse:
+    console: WebConsole = request.app.state.console
+    return JSONResponse(scrub({"automations": console.list_automations()}))
+
+
+async def create_or_update_automation(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    try:
+        payload = await _read_json(request)
+    except ValueError as exc:
+        return _safe_error(str(exc), 400)
+    if not isinstance(payload, dict):
+        return _safe_error("request body must be a JSON object", 400)
+    try:
+        result = console.save_automation(payload)
+    except KINETICError as exc:
+        return _safe_error(str(exc), 500)
+    except Exception as exc:  # noqa: BLE001
+        return _safe_error(f"failed to save automation: {type(exc).__name__}", 500)
+    return JSONResponse(scrub(result), status_code=201)
+
+
+async def get_automation(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    automation_id = request.path_params["automation_id"]
+    result = console.get_automation(automation_id)
+    if result is None:
+        return _safe_error(f"unknown automation: {automation_id}", 404)
+    return JSONResponse(scrub(result))
+
+
+async def delete_automation(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    automation_id = request.path_params["automation_id"]
+    if not console.delete_automation(automation_id):
+        return _safe_error(f"unknown automation: {automation_id}", 404)
+    return JSONResponse({"deleted": True, "id": automation_id})
+
+
+async def run_automation(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    automation_id = request.path_params["automation_id"]
+    try:
+        result = await console.run_automation_now(automation_id)
+    except KeyError:
+        return _safe_error(f"unknown automation: {automation_id}", 404)
+    except KINETICError as exc:
+        return _safe_error(str(exc), 403 if "ANTHROPIC_API_KEY" in str(exc) else 500)
+    except Exception as exc:  # noqa: BLE001
+        return _safe_error(f"failed to run automation: {type(exc).__name__}", 500)
+    return JSONResponse(scrub(result), status_code=201)
+
+
+async def list_files(request: Request) -> JSONResponse:
+    console: WebConsole = request.app.state.console
+    return JSONResponse(scrub({"files": console.list_files()}))
+
+
+async def upload_file(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    try:
+        form = await request.form()
+    except Exception as exc:  # noqa: BLE001
+        return _safe_error(f"malformed upload: {type(exc).__name__}", 400)
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return _safe_error("field 'file' is required", 400)
+    name = getattr(upload, "filename", "") or "upload"
+    content_type = getattr(upload, "content_type", "") or ""
+    try:
+        content = await upload.read()
+    except Exception as exc:  # noqa: BLE001
+        return _safe_error(f"could not read upload: {type(exc).__name__}", 400)
+    try:
+        result = await console.save_upload(
+            name=name, content=content, content_type=content_type,
+        )
+    except ValueError as exc:
+        return _safe_error(str(exc), 400)
+    except KINETICError as exc:
+        return _safe_error(str(exc), 500)
+    except Exception as exc:  # noqa: BLE001
+        return _safe_error(f"failed to save upload: {type(exc).__name__}", 500)
+    return JSONResponse(scrub(result), status_code=201)
+
+
+async def delete_file(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    file_id = request.path_params["file_id"]
+    if not console.delete_file(file_id):
+        return _safe_error(f"unknown file: {file_id}", 404)
+    return JSONResponse({"deleted": True, "id": file_id})
+
+
+async def list_pending_approvals(request: Request) -> JSONResponse:
+    console: WebConsole = request.app.state.console
+    task_id = request.path_params["task_id"]
+    return JSONResponse(scrub({"approvals": console.list_pending_approvals(task_id)}))
+
+
+async def resolve_approval(request: Request) -> Response:
+    console: WebConsole = request.app.state.console
+    task_id = request.path_params["task_id"]
+    request_id = request.path_params["request_id"]
+    try:
+        payload = await _read_json(request)
+    except ValueError as exc:
+        return _safe_error(str(exc), 400)
+    allow = bool(payload.get("allow")) if isinstance(payload, dict) else False
+    ok = console.resolve_approval(task_id, request_id, allow=allow)
+    if not ok:
+        return _safe_error("approval not found or already resolved", 404)
+    return JSONResponse({"resolved": True, "request_id": request_id, "allow": allow})
+
+
 # --- security middleware ----------------------------------------------------
 
 
@@ -316,6 +519,28 @@ def build_app(console: WebConsole) -> Starlette:
         Route("/api/tasks/{task_id}/cancel", cancel_task, methods=["POST"]),
         Route("/api/tasks/{task_id}/events", task_events, methods=["GET"]),
         Route("/api/tasks/{task_id}/outcome", task_outcome, methods=["GET"]),
+        Route("/api/tasks/{task_id}/approvals", list_pending_approvals, methods=["GET"]),
+        Route("/api/tasks/{task_id}/approvals/{request_id}/resolve", resolve_approval, methods=["POST"]),
+        # LLM provider config (base URL / proxy, model, interactive approval).
+        Route("/api/llm", get_llm_config, methods=["GET"]),
+        Route("/api/llm", set_llm_config, methods=["PUT"]),
+        # Agents CRUD.
+        Route("/api/agents", list_agents, methods=["GET"]),
+        Route("/api/agents", create_or_update_agent, methods=["POST"]),
+        Route("/api/agents/{agent_id}", get_agent, methods=["GET"]),
+        Route("/api/agents/{agent_id}", create_or_update_agent, methods=["PUT"]),
+        Route("/api/agents/{agent_id}", delete_agent, methods=["DELETE"]),
+        # Automations CRUD + run-now.
+        Route("/api/automations", list_automations, methods=["GET"]),
+        Route("/api/automations", create_or_update_automation, methods=["POST"]),
+        Route("/api/automations/{automation_id}", get_automation, methods=["GET"]),
+        Route("/api/automations/{automation_id}", create_or_update_automation, methods=["PUT"]),
+        Route("/api/automations/{automation_id}", delete_automation, methods=["DELETE"]),
+        Route("/api/automations/{automation_id}/run", run_automation, methods=["POST"]),
+        # File uploads.
+        Route("/api/files", list_files, methods=["GET"]),
+        Route("/api/files", upload_file, methods=["POST"]),
+        Route("/api/files/{file_id}", delete_file, methods=["DELETE"]),
     ]
     if _STATIC_DIR.is_dir():
         routes.append(Mount("/static", app=StaticFiles(directory=str(_STATIC_DIR))))

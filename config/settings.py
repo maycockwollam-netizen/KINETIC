@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     max_turns: int | None = 40
     max_budget_usd: float | None = None
     permission_mode: str = "default"
+    # Optional LLM provider base URL (proxy / gateway / OpenAI-compatible
+    # endpoint). When set, it is forwarded to the Claude Code subprocess via
+    # the ``ANTHROPIC_BASE_URL`` env var. The API key is NEVER persisted here
+    # or in a config file — it is read from ``ANTHROPIC_API_KEY`` (or supplied
+    # per-task via the web console, held in memory only).
+    llm_base_url: str | None = None
 
     # --- Workspace ---------------------------------------------------------
     workspace_root: Path = Field(default_factory=lambda: Path.home() / ".kinetic" / "workspaces")
@@ -150,6 +156,9 @@ class Settings(BaseSettings):
     web_event_poll_timeout: float = 1.0
     # Maximum events kept per task for late SSE clients (per-task ring).
     web_max_event_log: int = 512
+    # How long (seconds) an interactive tool approval waits for a human before
+    # auto-denying. Bounded so a forgotten approval never stalls the agent.
+    web_approval_timeout: float = 300.0
 
     @field_validator(
         "workspace_root", "session_root", "audit_log_path", "memory_db_path",
@@ -182,6 +191,20 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"permission_mode must be one of {allowed}, got {v!r}")
         return v
+
+    @field_validator("llm_base_url", mode="after")
+    @classmethod
+    def _valid_llm_base_url(cls, v: str | None) -> str | None:
+        if v is None or not v.strip():
+            return None
+        from urllib.parse import urlparse
+
+        parsed = urlparse(v.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                "llm_base_url must be an http(s) URL, e.g. https://api.anthropic.com"
+            )
+        return v.strip()
 
     # --- Bounded numeric limits -------------------------------------------
     # Every untrusted or model-influenced quantity must have a bound so a
@@ -387,6 +410,15 @@ class Settings(BaseSettings):
             raise ValueError("web_max_event_log must be >= 1")
         if v > 10_000:
             raise ValueError("web_max_event_log must be <= 10000")
+        return v
+
+    @field_validator("web_approval_timeout", mode="after")
+    @classmethod
+    def _web_approval_timeout_bounded(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("web_approval_timeout must be positive")
+        if v > 3600:
+            raise ValueError("web_approval_timeout must be <= 3600")
         return v
 
     @model_validator(mode="after")
