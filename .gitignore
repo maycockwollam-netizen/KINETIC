@@ -12,6 +12,7 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
 
 # Editor / OS
 .DS_Store

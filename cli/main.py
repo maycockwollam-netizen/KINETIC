@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -122,7 +123,7 @@ def main() -> None:
 
 # --- Phase 5: task orchestration commands -----------------------------------
 
-def _load_orchestrator_state(workspace: str, task_id: str) -> dict[str, object]:
+def _load_orchestrator_state(workspace: str, task_id: str) -> dict[str, Any]:
     """Best-effort: load a task checkpoint to report status without a live model.
 
     Returns a status dict; never starts the agent. Used by ``kinetic task status``.

@@ -768,5 +768,71 @@ Ruff clean. Wheel builds + installs with `store` package. No secrets committed.
   records honest `last_run_at`/history; `next_run_at` stays None (a real cron
   engine would be a separate worker, out of scope for the web console).
 
+## Phase 7.4 scope (DONE — repository & developer infrastructure hardening)
+A repository-quality / developer-experience phase, NOT an architecture change.
+Goal: make regressions automatically detectable and the repo easier to build,
+test, type-check, and maintain. No agent architecture, no SDK replacement,
+no new execution path, no speculative refactor.
+- GitHub Actions CI (`.github/workflows/ci.yml`): Ruff → pytest+coverage →
+  wheel build, on PRs + pushes to main, Python 3.11 + 3.13 matrix. No deploy,
+  no publish, no secrets.
+- MIT `LICENSE` file (pyproject declared MIT from the start; file was missing).
+- Test coverage via `pytest-cov`: `[tool.coverage.run]` sources = the 14
+  packages + 3 root modules; branch=true; `[tool.coverage.report]` with
+  `fail_under=75` (conservative regression guard — baseline 82%; docker/live-
+  SDK paths legitimately skip in CI). Added to `[project.optional-dependencies]
+  dev`. NEVER lower fail_under to hide a drop; raise only with real tests.
+- Type checking via `mypy` (configured, NOT a CI hard-fail yet — baseline
+  guard). `[tool.mypy]`: python_version=3.11, explicit_package_bases=true +
+  mypy_path="." (resolves the root-`__init__.py` ambiguity so imports resolve
+  to `agent`/`tasks`/... not `KINETIC.agent`). ignore_missing_imports=true
+  (SDK untyped). overrides: pydantic.* + claude_agent_sdk.* ignore_errors
+  (dynamic surfaces). Baseline after P7.4 small fixes: 77 errors, concentrated
+  in agent/adapter.py (33 — the lazy SDK import `None`-assignment pattern) +
+  memory/store.py / tasks/manager.py / web/serialize.py (Function-not-valid-
+  as-type from method-name annotations) + Returning-Any from JSON parsing.
+- Small clearly-correct type fixes: web/app.py route list typed
+  `list[Route | Mount]` (Mount appended to list[Route]); cli/main.py
+  `_load_orchestrator_state` return `dict[str, Any]` (was `dict[str, object]`,
+  making every index access a mypy error); web/app.py dropped an unused
+  `type: ignore` on the `from __init__ import __version__` line.
+- `.env.example`: documents ANTHROPIC_API_KEY + KINETIC_WEB_* + KINETIC_DOCKER_*
+  + common runtime/task settings. Placeholders only, NEVER real creds.
+- `CHANGELOG.md`: per-phase history (P1→P7.3+ + Unreleased P7.4) from
+  README/AGENTS.md (shallow clone, no git dates).
+- `CONTRIBUTING.md`: setup, tests, coverage, lint, mypy, build, web console,
+  PR expectations, security expectations (single execution path, no
+  os.system/shell=True/eval, web layer delegates to store/).
+- README: Status → 7.3+/7.4; Testing section (+coverage+mypy); new CI +
+  License + Project-documentation sections; web console localhost/no-auth/
+  no-TLS warning.
+- Web security: NO new security redesign (per spec). Documented the
+  limitations (localhost default, no rate limiting, no auth, no TLS, no SSE
+  connection cap) in README + CONTRIBUTING as future-hardening follow-up.
+  Did not break the P7.3 console.
+775 tests pass (unchanged). 17 skipped. Ruff clean. Wheel builds. Coverage
+82%. Mypy baseline 77 errors (documented, not a hard-fail). No behavior
+change, no architecture change, no secrets committed.
+
+## Phase 7.4 gotchas
+- `uv add --dev` writes to `[dependency-groups]` dev, but this project uses
+  `[project.optional-dependencies]` dev as the canonical dev install
+  (`uv sync --extra dev`). After `uv add --dev`, move the package into
+  `[project.optional-dependencies]` dev and delete the `[dependency-groups]`
+  section, then `uv sync --extra dev` + `uv lock` so the lockfile matches.
+- mypy sees the repo root `__init__.py` and reports "Source file found twice
+  under different module names: KINETIC.agent.adapter and agent.adapter".
+  Fix: `[tool.mypy] explicit_package_bases = true` + `mypy_path = "."` so
+  module names resolve to the top-level packages the project imports.
+- The 77 mypy baseline errors are NOT bugs to fix en masse in P7.4 — they are
+  the SDK lazy-import pattern (adapter sets SDK names to None on ImportError,
+  so mypy can't infer instance attr types) + pydantic-dynamic surfaces + a
+  few "Function not valid as a type" annotations. A future type-tightening
+  pass should add explicit instance-attr annotations to AgentAdapter and
+  fix the method-name-as-type annotations; do NOT add blanket `# type: ignore`.
+- Coverage `fail_under=75` is deliberately below the 82% baseline because
+  docker.py (~22% — daemon absent) and live-SDK paths legitimately skip in CI.
+  It catches major regressions, not line-level gaming.
+
 ## TODO Phase 8
 Not started.

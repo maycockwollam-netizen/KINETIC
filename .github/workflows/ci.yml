@@ -1,0 +1,60 @@
+# KINETIC CI — quality gates for pull requests and main pushes.
+#
+# Runs the same checks a developer runs locally:
+#   1. Ruff lint
+#   2. pytest (with coverage)
+#   3. wheel build
+#
+# No deployment, no publishing, no secrets are used. Docker integration tests
+# are skipped in CI (the daemon is not available) — they are marked skip and
+# remain green locally/where Docker is present.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: lint, test, build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # requires-python = ">=3.11". Test the lower bound and a current CPython.
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: pytest (with coverage)
+        run: uv run pytest --cov --cov-report=xml --cov-report=term-missing
+
+      - name: Build wheel
+        run: uv build
+
+      - name: Upload coverage report
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore

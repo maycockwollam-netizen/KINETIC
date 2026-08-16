@@ -25,7 +25,9 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-timeout>=2.0",
+    "pytest-cov>=4.0",
     "ruff>=0.5",
+    "mypy>=1.10",
 ]
 
 [project.scripts]
@@ -88,3 +90,70 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
+
+[tool.coverage.run]
+# Measure the application source only (never tests, venv, or build artifacts).
+source = [
+    "agent", "cli", "config", "context", "dependencies", "environment",
+    "events", "intelligence", "memory", "observability", "project",
+    "security", "store", "tasks", "tools", "web", "errors", "lifecycle",
+    "paths",
+]
+branch = true
+omit = ["*/__pycache__/*", "tests/*", ".venv/*", "build/*", "dist/*"]
+
+[tool.coverage.report]
+# Show untested lines so developers can target real gaps (not to be gamed).
+show_missing = true
+skip_covered = false
+# Conservative regression guard. Baseline (P7.4): 82% total branch coverage.
+# Docker integration paths (~22% of environment/docker.py) and live-SDK paths
+# are legitimately skipped in CI (no daemon / no ANTHROPIC_API_KEY), so the
+# threshold is set comfortably below the measured baseline to catch major
+# regressions without forcing coverage gaming. Raise it only when real tests
+# are added — never lower it to hide a drop.
+fail_under = 75
+# Exclude trivially-unreachable guard lines from the missing report.
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.mypy]
+# P7.4: verify the existing type quality (99.3% return annotations) without a
+# giant type-system rewrite. Strict-ish defaults with documented relaxations
+# where the third-party SDK / pydantic dynamic surface makes strict checking
+# noisy. This baseline run reports real errors; it is NOT wired into the CI
+# fail step yet (see CONTRIBUTING.md / CHANGELOG). It is a baseline + local
+# guard to be tightened over time.
+python_version = "3.11"
+# The repo root has an __init__.py (product version marker), which makes mypy
+# ambiguous about module names (KINETIC.agent vs agent). explicit_package_bases
+# + mypy_path="." resolves imports to the top-level package names the project
+# actually uses (from agent import ..., from tasks import ...).
+explicit_package_bases = true
+mypy_path = "."
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+no_implicit_optional = true
+check_untyped_defs = true
+# The Claude Agent SDK ships without inline stubs; treat it as untyped rather
+# than failing every call site. Same for pydantic internal plugin noise.
+ignore_missing_imports = true
+# Exclude generated/vendored/build paths.
+exclude = ["tests/", "build/", "dist/", "\\.venv/"]
+
+[[tool.mypy.overrides]]
+# Pydantic v2 uses dynamic field creation that mypy cannot fully follow.
+module = ["pydantic.*", "pydantic_settings.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# The SDK wrapper surface is large and untyped; do not block on its internals.
+module = ["claude_agent_sdk.*"]
+ignore_errors = true
+

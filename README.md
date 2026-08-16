@@ -6,7 +6,7 @@ It understands a software project, reads and modifies files, executes terminal c
 
 ## Status
 
-Phases 1–7 are implemented:
+Phases 1–7.3+ are implemented:
 
 - **Phase 1**: SDK adapter, agent session, event bus, tool registry, terminal + filesystem tools, permission policy, audit logging, configuration, CLI.
 - **Phase 2**: project management, workspace management, Git tools, dependency detection + installation.
@@ -17,6 +17,8 @@ Phases 1–7 are implemented:
 - **Phase 7**: production hardening — configuration validation, structured logging, metrics, EventBus hardening, graceful shutdown, environment diagnostics, security audit, CLI hardening, packaging, documentation.
 - **Phase 7.2**: repository/package namespace flattening — the `kinetic/` namespace was removed; source lives as top-level packages at the repo root.
 - **Phase 7.3**: Web Agent Test Console — a thin HTTP/SSE adapter over the existing backend for observing real agent tasks in a browser.
+- **Phase 7.3+**: replaced demo web surfaces with real backend endpoints (per-task LLM overrides, interactive approval, server-side agents/automations/files persistence).
+- **Phase 7.4**: repository & developer infrastructure hardening — CI, MIT LICENSE, coverage measurement, type checking, repo docs.
 
 The architecture is deliberately layered so that a future "AI Company" layer (CEO agent, departments, worker pools, etc.) can sit *above* the coding-agent core without rewriting it.
 
@@ -163,16 +165,26 @@ Or programmatically:
 ## Testing
 
     uv run pytest          # full suite (asyncio_mode=auto)
-    uv run ruff check      # lint
+    uv run pytest --cov    # with coverage report
+    uv run ruff check .    # lint
+    uv run mypy <source dirs>   # type check (see CONTRIBUTING.md)
 
 Live SDK integration tests run only when `ANTHROPIC_API_KEY` is set; otherwise they skip cleanly. Docker integration tests run only when the daemon is available.
+
+Coverage is measured with `pytest-cov` (config in `[tool.coverage.*]`). Baseline: **82%** branch coverage; a conservative `fail_under = 75` guards against major regressions. Type checking uses `mypy` (config in `[tool.mypy]`) — see `CONTRIBUTING.md` for the baseline and strategy.
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and push to `main`: Ruff → pytest+coverage → wheel build, on Python 3.11 and 3.13. There is no deployment or publishing automation.
 
 ## Development setup
 
     git clone <repo>
     cd KINETIC
-    uv sync --all-extras
+    uv sync --extra dev
     uv run pytest
+
+See `CONTRIBUTING.md` for the full development workflow (tests, coverage, lint, type checking, wheel build, web console, PR expectations, security expectations). A `.env.example` documents the supported environment variables.
 
 ## Production considerations
 
@@ -182,3 +194,18 @@ Live SDK integration tests run only when `ANTHROPIC_API_KEY` is set; otherwise t
 - Monitor the metrics snapshot for task failure rates and repair attempts.
 - Use `environment.diagnostics.find_stale_containers()` to detect leaked containers.
 - Checkpoints are atomic and fail-closed on corruption.
+- The web console defaults to `127.0.0.1` (localhost). It has **no auth, no
+  rate limiting, no TLS** — do not expose it on a public interface. A future
+  hardening phase should add these (see `CONTRIBUTING.md` → Security).
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
+
+## Project documentation
+
+- [`README.md`](README.md) — overview, architecture, layout, security.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — development workflow + expectations.
+- [`CHANGELOG.md`](CHANGELOG.md) — per-phase change history.
+- [`AGENTS.md`](AGENTS.md) — detailed phase-by-phase engineering memory.
+- [`.env.example`](.env.example) — supported environment variables.

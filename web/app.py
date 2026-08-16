@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 VERSION_ATTR = "__version__"
 try:
-    from __init__ import __version__ as _VERSION  # type: ignore[attr-defined]
+    from __init__ import __version__ as _VERSION
 except Exception:  # noqa: BLE001
     _VERSION = "0.1.0"
 
@@ -509,7 +509,7 @@ async def _send_json_error(send: Send, message: str, status: int, scope: Scope) 
 
 def build_app(console: WebConsole) -> Starlette:
     """Assemble the Starlette app wired to a :class:`WebConsole`."""
-    routes = [
+    routes: list[Route | Mount] = [
         Route("/api/health", health, methods=["GET"]),
         Route("/api/tasks", create_task, methods=["POST"]),
         Route("/api/tasks", list_tasks, methods=["GET"]),
